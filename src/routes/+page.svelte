@@ -2,44 +2,41 @@
 	import { onMount } from 'svelte';
 	import confetti from 'canvas-confetti';
 
-	interface Player {
-		name: string;
-		matchesPlayed: number;
-		defeats: number;
-		hooked: number;
-	}
-
-	interface Game {
+	interface Group {
 		id: string;
-		players: Player[];
+		name: string;
+		playerNames: string[];
+		games: any[];
 		createdAt: string;
 		updatedAt: string;
 	}
 
+	let groupName = '';
 	let playerName = '';
 	let players: string[] = [];
 	let errorMessage = '';
 	let successMessage = '';
-	let savedGames: Game[] = [];
+	let savedGroups: Group[] = [];
 	let isLoading = false;
+	let showCreateForm = false;
 
-	// Charger les parties sauvegardées au chargement du composant
+	// Charger les groupes sauvegardés au chargement du composant
 	onMount(async () => {
-		await loadSavedGames();
+		await loadSavedGroups();
 	});
 
-	async function loadSavedGames() {
+	async function loadSavedGroups() {
 		try {
-			const response = await fetch('/api/games');
+			const response = await fetch('/api/groups');
 			const result = await response.json();
 
 			if (result.success) {
-				savedGames = result.data;
+				savedGroups = result.data;
 			} else {
-				console.error('Erreur lors du chargement des parties:', result.error);
+				console.error('Erreur lors du chargement des groupes:', result.error);
 			}
 		} catch (error) {
-			console.error('Erreur lors du chargement des parties:', error);
+			console.error('Erreur lors du chargement des groupes:', error);
 		}
 	}
 
@@ -50,24 +47,27 @@
 		}
 
 		if (players.includes(playerName.trim())) {
-			errorMessage = 'Ce nom de joueur existe déjà';
+			errorMessage = 'Ce joueur est déjà dans la liste';
 			return;
 		}
 
 		players = [...players, playerName.trim()];
 		playerName = '';
 		errorMessage = '';
-		successMessage = '';
 	}
 
 	function removePlayer(index: number) {
 		players = players.filter((_, i) => i !== index);
-		successMessage = '';
 	}
 
-	async function validateForm() {
-		if (players.length === 0) {
-			errorMessage = 'Veuillez ajouter au moins un joueur';
+	async function createGroup() {
+		if (groupName.trim() === '') {
+			errorMessage = 'Veuillez entrer un nom de groupe';
+			return;
+		}
+
+		if (players.length < 2) {
+			errorMessage = 'Il faut au moins 2 joueurs pour créer un groupe';
 			return;
 		}
 
@@ -75,220 +75,279 @@
 		errorMessage = '';
 
 		try {
-			// Créer une nouvelle partie via l'API
-			const response = await fetch('/api/games', {
+			const response = await fetch('/api/groups', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'
 				},
-				body: JSON.stringify({ players })
+				body: JSON.stringify({
+					name: groupName.trim(),
+					playerNames: players
+				})
 			});
 
 			const result = await response.json();
 
 			if (result.success) {
-				successMessage = `Partie créée avec succès ! ID: ${result.data.id}`;
+				successMessage = `Groupe "${groupName}" créé avec succès !`;
 
-				// Recharger la liste des parties sauvegardées
-				await loadSavedGames();
+				// Trigger confetti
+				confetti({
+					particleCount: 100,
+					spread: 70,
+					origin: { y: 0.6 }
+				});
 
-				// Réinitialiser le formulaire
+				// Reset form
+				groupName = '';
 				players = [];
+				showCreateForm = false;
+
+				// Reload groups
+				await loadSavedGroups();
+
+				// Clear success message after 3 seconds
+				setTimeout(() => {
+					successMessage = '';
+				}, 3000);
 			} else {
-				errorMessage = result.error || 'Erreur lors de la sauvegarde de la partie';
+				errorMessage = result.error || 'Erreur lors de la création du groupe';
 			}
 		} catch (error) {
-			console.error('Erreur lors de la sauvegarde:', error);
-			errorMessage = 'Erreur lors de la sauvegarde de la partie';
-		} finally {
-			isLoading = false;
+			console.error('Erreur lors de la création du groupe:', error);
+			errorMessage = 'Erreur lors de la création du groupe';
+		}
+
+		isLoading = false;
+	}
+
+	async function deleteGroup(groupId: string, groupName: string) {
+		if (
+			!confirm(
+				`Êtes-vous sûr de vouloir supprimer le groupe "${groupName}" ? Cette action est irréversible.`
+			)
+		) {
+			return;
+		}
+
+		try {
+			const response = await fetch(`/api/groups/${groupId}`, {
+				method: 'DELETE'
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				successMessage = `Groupe "${groupName}" supprimé avec succès`;
+				await loadSavedGroups();
+
+				setTimeout(() => {
+					successMessage = '';
+				}, 3000);
+			} else {
+				errorMessage = result.error || 'Erreur lors de la suppression du groupe';
+			}
+		} catch (error) {
+			console.error('Erreur lors de la suppression du groupe:', error);
+			errorMessage = 'Erreur lors de la suppression du groupe';
 		}
 	}
 
-	function handleKeyDown(event: KeyboardEvent) {
-		if (event.key === 'Enter') {
-			addPlayer();
+	async function copyToClipboard(text: string) {
+		try {
+			await navigator.clipboard.writeText(text);
+
+			// Trigger confetti effect
+			confetti({
+				particleCount: 50,
+				spread: 50,
+				origin: { y: 0.7 }
+			});
+		} catch (err) {
+			console.error('Erreur lors de la copie:', err);
 		}
-	}
-
-	function triggerConfetti() {
-		// Configuration pour une explosion de confettis
-		confetti({
-			particleCount: 100,
-			spread: 70,
-			origin: { y: 0.6 },
-			colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
-		});
-
-		// Ajouter un second effet légèrement décalé
-		setTimeout(() => {
-			confetti({
-				particleCount: 50,
-				angle: 60,
-				spread: 55,
-				origin: { x: 0, y: 0.6 }
-			});
-		}, 150);
-
-		setTimeout(() => {
-			confetti({
-				particleCount: 50,
-				angle: 120,
-				spread: 55,
-				origin: { x: 1, y: 0.6 }
-			});
-		}, 300);
 	}
 </script>
 
-<div class="mx-auto min-h-screen max-w-2xl bg-gray-900 p-8 font-sans text-gray-100">
-	<h1 class="mb-8 text-center text-3xl font-bold text-gray-100">Ajouter des joueurs</h1>
+<div class="mx-auto min-h-screen max-w-4xl bg-gray-900 p-8 font-sans text-gray-100">
+	<h1 class="mb-8 text-center text-3xl font-bold text-gray-100">Mes Groupes de Joueurs</h1>
 
-	<div class="mb-8">
-		<div class="mb-2 flex gap-2 max-sm:flex-col">
-			<input
-				type="text"
-				bind:value={playerName}
-				on:keydown={handleKeyDown}
-				placeholder="Nom du joueur"
-				maxlength="50"
-				class="flex-1 rounded-lg border-2 border-gray-600 bg-gray-700 px-3 py-3 text-base text-gray-100 transition-colors duration-200 focus:border-green-400 focus:outline-none max-sm:w-full"
-			/>
-			<button
-				on:click={addPlayer}
-				disabled={playerName.trim() === ''}
-				class="cursor-pointer rounded-lg border-none bg-green-500 px-6 py-3 text-base text-white transition-colors duration-200 hover:bg-green-600 disabled:cursor-not-allowed disabled:bg-gray-600 max-sm:w-full"
-			>
-				Ajouter
-			</button>
-		</div>
-
-		{#if errorMessage}
-			<p class="m-0 text-sm text-red-400">{errorMessage}</p>
-		{/if}
-
-		{#if successMessage}
-			<p class="m-0 text-sm text-green-400">{successMessage}</p>
-		{/if}
-	</div>
-
-	{#if players.length > 0}
-		<div class="mb-8 rounded-lg border border-gray-600 bg-gray-800 p-6">
-			<h2 class="mb-4 text-xl text-gray-300">Joueurs ajoutés ({players.length})</h2>
-			<ul class="m-0 list-none p-0">
-				{#each players as player, index}
-					<li
-						class="mb-2 flex items-center justify-between rounded-md border border-gray-600 bg-gray-700 px-3 py-3 transition-shadow duration-200 hover:shadow-lg hover:shadow-black/30"
-					>
-						<span class="font-medium text-gray-100">{player}</span>
-						<button
-							on:click={() => removePlayer(index)}
-							title="Supprimer ce joueur"
-							class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border-none bg-red-500 text-lg leading-none text-white transition-colors duration-200 hover:bg-red-600"
-						>
-							×
-						</button>
-					</li>
-				{/each}
-			</ul>
+	<!-- Messages d'erreur et de succès -->
+	{#if errorMessage}
+		<div class="mb-4 rounded-lg border border-red-600 bg-red-900 p-4 text-red-200">
+			{errorMessage}
 		</div>
 	{/if}
 
-	<div class="text-center">
+	{#if successMessage}
+		<div class="mb-4 rounded-lg border border-green-600 bg-green-900 p-4 text-green-200">
+			{successMessage}
+		</div>
+	{/if}
+
+	<!-- Bouton pour créer un nouveau groupe -->
+	<div class="mb-8 text-center">
 		<button
-			on:click={validateForm}
-			disabled={players.length === 0 || isLoading}
-			class="cursor-pointer rounded-lg border-none bg-blue-500 px-8 py-4 text-lg font-semibold text-white transition-colors duration-200 hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-600"
+			on:click={() => (showCreateForm = !showCreateForm)}
+			class="rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-blue-700"
 		>
-			{#if isLoading}
-				Sauvegarde...
-			{:else}
-				Valider le formulaire
-			{/if}
+			{showCreateForm ? 'Annuler' : 'Créer un nouveau groupe'}
 		</button>
 	</div>
 
-	{#if savedGames.length > 0}
-		<div class="mt-8 rounded-lg border border-gray-600 bg-gray-800 p-6">
-			<h2 class="mb-4 text-xl text-gray-300">Parties sauvegardées ({savedGames.length})</h2>
-			<div class="space-y-3">
-				{#each savedGames as game}
-					<div
-						class="group rounded-md border border-gray-600 bg-gray-700 p-4 transition-all duration-200 hover:border-blue-500 hover:bg-gray-600"
+	<!-- Formulaire de création de groupe -->
+	{#if showCreateForm}
+		<div class="mb-8 rounded-lg border border-gray-600 bg-gray-800 p-6">
+			<h2 class="mb-4 text-xl font-semibold text-gray-200">Nouveau Groupe</h2>
+
+			<!-- Nom du groupe -->
+			<div class="mb-4">
+				<label for="groupName" class="mb-2 block text-sm font-medium text-gray-300">
+					Nom du groupe
+				</label>
+				<input
+					id="groupName"
+					type="text"
+					bind:value={groupName}
+					placeholder="Entrez le nom du groupe"
+					maxlength="50"
+					class="w-full rounded-lg border-2 border-gray-600 bg-gray-700 px-3 py-3 text-gray-100 focus:border-blue-400 focus:outline-none"
+				/>
+			</div>
+
+			<!-- Ajout de joueurs -->
+			<div class="mb-4">
+				<label for="playerName" class="mb-2 block text-sm font-medium text-gray-300">
+					Ajouter des joueurs
+				</label>
+				<div class="flex gap-2 max-sm:flex-col">
+					<input
+						id="playerName"
+						type="text"
+						bind:value={playerName}
+						on:keydown={(e) => e.key === 'Enter' && addPlayer()}
+						placeholder="Nom du joueur"
+						maxlength="50"
+						class="flex-1 rounded-lg border-2 border-gray-600 bg-gray-700 px-3 py-3 text-gray-100 focus:border-green-400 focus:outline-none"
+					/>
+					<button
+						on:click={addPlayer}
+						disabled={playerName.trim() === ''}
+						class="rounded-lg bg-green-600 px-6 py-3 text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-600"
 					>
-						<div class="mb-2 flex items-center justify-between">
-							<span class="text-sm text-gray-400">ID: {game.id}</span>
-							<span class="text-sm text-gray-400">
-								{new Date(game.createdAt).toLocaleDateString('fr-FR')} à {new Date(
-									game.createdAt
-								).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-							</span>
-						</div>
-						<div class="mb-3">
-							<div class="mb-2 text-gray-100">
-								<strong>Joueurs ({game.players.length}):</strong>
+						Ajouter
+					</button>
+				</div>
+			</div>
+
+			<!-- Liste des joueurs -->
+			{#if players.length > 0}
+				<div class="mb-4">
+					<h3 class="mb-2 text-lg font-medium text-gray-300">Joueurs ({players.length})</h3>
+					<div class="space-y-2">
+						{#each players as player, index}
+							<div class="flex items-center justify-between rounded-lg bg-gray-700 px-4 py-2">
+								<span class="text-gray-200">{player}</span>
+								<button
+									on:click={() => removePlayer(index)}
+									class="text-red-400 transition-colors hover:text-red-300"
+									title="Supprimer ce joueur"
+								>
+									✕
+								</button>
 							</div>
-							<div class="space-y-1">
-								{#each game.players as player}
-									<div class="flex items-center justify-between text-sm">
-										<span class="text-gray-200">{player.name}</span>
-										<div class="flex gap-2 text-xs text-gray-400">
-											<span>M: {player.matchesPlayed}</span>
-											<span>D: {player.defeats}</span>
-											<span>A: {player.hooked || 0}</span>
-											{#if player.matchesPlayed > 0}
-												<span class="text-blue-400">
-													{(
-														((player.matchesPlayed - player.defeats) / player.matchesPlayed) *
-														100
-													).toFixed(0)}% V
-												</span>
-												<span class="text-red-400">
-													{((player.defeats / player.matchesPlayed) * 100).toFixed(0)}% TD
-												</span>
-											{/if}
-										</div>
-									</div>
-								{/each}
-							</div>
-						</div>
-						<div class="flex items-center justify-between">
-							<a
-								href="/game/{game.id}"
-								class="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1 text-sm text-white transition-colors duration-200 hover:bg-blue-700"
-							>
-								Voir la partie
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M9 5l7 7-7 7"
-									/>
-								</svg>
-							</a>
-							<button
-								on:click={() => {
-									navigator.clipboard.writeText(`${window.location.origin}/game/${game.id}`);
-									triggerConfetti();
-								}}
-								class="inline-flex items-center gap-1 rounded bg-green-600 px-3 py-1 text-sm text-white transition-colors duration-200 hover:bg-green-700"
-								title="Copier le lien de la partie"
-							>
-								Copier lien
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-									/>
-								</svg>
-							</button>
-						</div>
+						{/each}
 					</div>
-				{/each}
+				</div>
+			{/if}
+
+			<!-- Boutons d'action -->
+			<div class="flex justify-end gap-4">
+				<button
+					on:click={() => {
+						showCreateForm = false;
+						groupName = '';
+						players = [];
+						playerName = '';
+						errorMessage = '';
+					}}
+					class="rounded-lg bg-gray-600 px-6 py-3 text-white transition-colors hover:bg-gray-700"
+				>
+					Annuler
+				</button>
+				<button
+					on:click={createGroup}
+					disabled={isLoading || groupName.trim() === '' || players.length < 2}
+					class="rounded-lg bg-blue-600 px-6 py-3 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-600"
+				>
+					{isLoading ? 'Création...' : 'Créer le groupe'}
+				</button>
 			</div>
 		</div>
 	{/if}
+
+	<!-- Liste des groupes -->
+	<div class="space-y-4">
+		{#if savedGroups.length === 0}
+			<div class="rounded-lg border border-gray-600 bg-gray-800 p-8 text-center">
+				<p class="text-lg text-gray-400">Aucun groupe créé pour l'instant</p>
+				<p class="mt-2 text-sm text-gray-500">Créez votre premier groupe pour commencer !</p>
+			</div>
+		{:else}
+			{#each savedGroups as group}
+				<div class="rounded-lg border border-gray-600 bg-gray-800 p-6">
+					<div class="mb-4 flex items-start justify-between">
+						<div class="flex-1">
+							<h3 class="mb-2 text-xl font-semibold text-gray-200">{group.name}</h3>
+							<div class="flex items-center gap-4 text-sm text-gray-400">
+								<span
+									>{group.playerNames.length} joueur{group.playerNames.length > 1 ? 's' : ''}</span
+								>
+								<span>{group.games.length} partie{group.games.length > 1 ? 's' : ''}</span>
+								<span>Créé le {new Date(group.createdAt).toLocaleDateString('fr-FR')}</span>
+							</div>
+						</div>
+						<div class="flex gap-2">
+							<button
+								on:click={() => copyToClipboard(`${window.location.origin}/group/${group.id}`)}
+								class="rounded bg-gray-600 px-3 py-1 text-xs text-white transition-colors hover:bg-gray-700"
+								title="Copier le lien du groupe"
+							>
+								📋
+							</button>
+							<button
+								on:click={() => deleteGroup(group.id, group.name)}
+								class="rounded bg-red-600 px-3 py-1 text-xs text-white transition-colors hover:bg-red-700"
+								title="Supprimer le groupe"
+							>
+								🗑️
+							</button>
+						</div>
+					</div>
+
+					<!-- Joueurs du groupe -->
+					<div class="mb-4">
+						<h4 class="mb-2 text-sm font-medium text-gray-300">Joueurs :</h4>
+						<div class="flex flex-wrap gap-2">
+							{#each group.playerNames as playerName}
+								<span class="rounded-full bg-blue-600 px-3 py-1 text-xs text-white">
+									{playerName}
+								</span>
+							{/each}
+						</div>
+					</div>
+
+					<!-- Bouton d'accès au groupe -->
+					<div class="flex justify-end">
+						<a
+							href="/group/{group.id}"
+							class="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition-colors hover:bg-blue-700"
+						>
+							Gérer le groupe →
+						</a>
+					</div>
+				</div>
+			{/each}
+		{/if}
+	</div>
 </div>

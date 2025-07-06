@@ -7,7 +7,8 @@ export const load: PageLoad = async ({ params, fetch }) => {
 
 		if (result.success) {
 			return {
-				game: result.data
+				game: result.data.game,
+				groupId: result.data.groupId
 			};
 		} else {
 			return {

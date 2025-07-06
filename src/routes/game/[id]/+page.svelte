@@ -6,21 +6,20 @@
 
 	export let data: PageData;
 
-	interface Player {
+	interface PlayerInGame {
 		name: string;
-		matchesPlayed: number;
-		defeats: number;
-		hooked: number;
+		lost: boolean;
+		hooked: boolean;
 	}
 
 	interface Game {
 		id: string;
-		players: Player[];
-		createdAt: string;
-		updatedAt: string;
+		date: string;
+		players: PlayerInGame[];
 	}
 
 	$: game = data.game as Game | undefined;
+	$: groupId = data.groupId as string | undefined;
 	$: error = data.error as string | undefined;
 
 	function formatDate(dateString: string): string {
@@ -35,7 +34,11 @@
 	}
 
 	function goBack() {
-		goto('/');
+		if (groupId) {
+			goto(`/group/${groupId}`);
+		} else {
+			goto('/');
+		}
 	}
 
 	function copyGameId() {
@@ -49,6 +52,81 @@
 		const url = window.location.href;
 		navigator.clipboard.writeText(url);
 		triggerConfetti();
+	}
+
+	async function togglePlayerLost(playerName: string) {
+		if (!game) return;
+
+		try {
+			const response = await fetch(`/api/games/${game.id}/players/${playerName}`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					action: 'toggle-lost'
+				})
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				// Mettre à jour l'état local selon la logique "un seul perdant"
+				const targetPlayer = game.players.find(p => p.name === playerName);
+				if (targetPlayer) {
+					const newLostStatus = !targetPlayer.lost;
+					
+					if (newLostStatus) {
+						// Si on marque ce joueur comme perdant, tous les autres deviennent gagnants
+						game.players.forEach(p => {
+							p.lost = (p.name === playerName);
+						});
+					} else {
+						// Si on retire le statut perdant, seul ce joueur change
+						targetPlayer.lost = false;
+					}
+					
+					game = { ...game }; // Force reactivity
+				}
+				triggerConfetti();
+			} else {
+				console.error('Erreur lors de la mise à jour:', result.error);
+			}
+		} catch (error) {
+			console.error('Erreur lors de la mise à jour du statut:', error);
+		}
+	}
+
+	async function togglePlayerHooked(playerName: string) {
+		if (!game) return;
+
+		try {
+			const response = await fetch(`/api/games/${game.id}/players/${playerName}`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					action: 'toggle-hooked'
+				})
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				// Mettre à jour l'état local
+				const playerIndex = game.players.findIndex((p) => p.name === playerName);
+				if (playerIndex !== -1) {
+					game.players[playerIndex].hooked = !game.players[playerIndex].hooked;
+					game = { ...game }; // Force reactivity
+				}
+				triggerConfetti();
+			} else {
+				console.error('Erreur lors de la mise à jour:', result.error);
+			}
+		} catch (error) {
+			console.error('Erreur lors de la mise à jour du statut:', error);
+		}
 	}
 
 	function triggerConfetti() {
@@ -79,48 +157,11 @@
 			});
 		}, 300);
 	}
-
-	async function updatePlayerStats(
-		playerName: string,
-		matchesPlayed: number,
-		defeats: number,
-		hooked?: number
-	) {
-		try {
-			const body: { matchesPlayed: number; defeats: number; hooked?: number } = {
-				matchesPlayed,
-				defeats
-			};
-			if (hooked !== undefined) {
-				body.hooked = hooked;
-			}
-
-			const response = await fetch(
-				`/api/games/${game?.id}/players/${encodeURIComponent(playerName)}`,
-				{
-					method: 'PATCH',
-					headers: {
-						'Content-Type': 'application/json'
-					},
-					body: JSON.stringify(body)
-				}
-			);
-
-			if (response.ok) {
-				// Recharger les données de la partie
-				window.location.reload();
-			} else {
-				console.error('Erreur lors de la mise à jour des statistiques');
-			}
-		} catch (error) {
-			console.error('Erreur lors de la mise à jour des statistiques:', error);
-		}
-	}
 </script>
 
 <svelte:head>
 	<title>
-		{game ? `Partie ${game.id} - 421` : 'Partie non trouvée - 421'}
+		{game && game.date ? `Partie du ${formatDate(game.date)} - 421` : 'Partie non trouvée - 421'}
 	</title>
 </svelte:head>
 
@@ -134,7 +175,7 @@
 			<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
 			</svg>
-			Retour à l'accueil
+			{groupId ? 'Retour au groupe' : 'Retour à l\'accueil'}
 		</button>
 	</div>
 
@@ -149,7 +190,7 @@
 				on:click={goBack}
 				class="rounded-lg bg-blue-500 px-6 py-3 text-white transition-colors duration-200 hover:bg-blue-600"
 			>
-				Retour à l'accueil
+				{groupId ? 'Retour au groupe' : 'Retour à l\'accueil'}
 			</button>
 		</div>
 	{:else if game}
@@ -160,9 +201,9 @@
 				<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 					<h1 class="text-3xl font-bold text-gray-100">Partie de 421</h1>
 					<div class="flex flex-col gap-2 sm:items-end">
-						<span class="text-sm text-gray-400">Créée le</span>
+						<span class="text-sm text-gray-400">Partie du</span>
 						<span class="text-lg font-medium text-gray-200">
-							{formatDate(game.createdAt)}
+							{formatDate(game.date)}
 						</span>
 					</div>
 				</div>
@@ -192,11 +233,27 @@
 				</div>
 
 				<!-- Statistiques -->
-				<div class="grid grid-cols-1 gap-4">
+				<div class="grid grid-cols-3 gap-4">
 					<div class="rounded-lg bg-gray-700 p-4 text-center">
-						<div class="text-2xl font-bold text-blue-400">{game.players.length}</div>
+						<div class="text-2xl font-bold text-blue-400">{game.players?.length || 0}</div>
 						<div class="text-sm text-gray-300">
-							{game.players.length === 1 ? 'Joueur' : 'Joueurs'}
+							{(game.players?.length || 0) === 1 ? 'Joueur' : 'Joueurs'}
+						</div>
+					</div>
+					<div class="rounded-lg bg-gray-700 p-4 text-center">
+						<div class="text-2xl font-bold text-red-400">
+							{game.players?.filter((p) => p.lost).length || 0}
+						</div>
+						<div class="text-sm text-gray-300">
+							Perdant{(game.players?.filter((p) => p.lost).length || 0) > 1 ? 's' : ''}
+						</div>
+					</div>
+					<div class="rounded-lg bg-gray-700 p-4 text-center">
+						<div class="text-2xl font-bold text-orange-400">
+							{game.players?.filter((p) => p.hooked).length || 0}
+						</div>
+						<div class="text-sm text-gray-300">
+							Accroché{(game.players?.filter((p) => p.hooked).length || 0) > 1 ? 's' : ''}
 						</div>
 					</div>
 				</div>
@@ -205,141 +262,61 @@
 			<!-- Liste des joueurs -->
 			<div class="rounded-lg border border-gray-600 bg-gray-800 p-6">
 				<h2 class="mb-4 text-2xl font-semibold text-gray-100">
-					Liste des joueurs ({game.players.length})
+					Joueurs de la partie ({game.players?.length || 0})
 				</h2>
 
-				{#if game.players.length > 0}
+				{#if game.players && game.players.length > 0}
 					<div class="space-y-4">
 						{#each game.players as player, index}
 							<div class="rounded-lg border border-gray-600 bg-gray-700 p-4">
-								<div class="mb-3 flex items-center gap-3">
-									<div
-										class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white"
-									>
-										{index + 1}
-									</div>
-									<div class="flex-1">
-										<h3 class="text-lg font-medium text-gray-100">{player.name}</h3>
-										<div class="text-sm text-gray-400">
-											{player.matchesPlayed} manches, {player.defeats} défaites, {player.hooked ||
-												0} accrochages
+								<div class="mb-4 flex items-center justify-between">
+									<div class="flex items-center gap-3">
+										<div
+											class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white"
+										>
+											{index + 1}
+										</div>
+										<div>
+											<h3 class="text-lg font-medium text-gray-100">{player.name}</h3>
+											<div class="text-sm text-gray-400">
+												{player.lost ? 'A perdu' : 'En vie'} •
+												{player.hooked ? 'Accroché' : 'Pas accroché'}
+											</div>
 										</div>
 									</div>
-								</div>
 
-								<div class="mb-4 grid grid-cols-4 gap-3">
-									<div class="rounded bg-gray-600 p-3 text-center">
-										<div class="text-xl font-bold text-blue-400">{player.matchesPlayed}</div>
-										<div class="text-xs text-gray-300">Manches</div>
-									</div>
-									<div class="rounded bg-gray-600 p-3 text-center">
-										<div class="text-xl font-bold text-red-400">{player.defeats}</div>
-										<div class="text-xs text-gray-300">Défaites</div>
-									</div>
-									<div class="rounded bg-gray-600 p-3 text-center">
-										<div class="text-xl font-bold text-orange-400">{player.hooked || 0}</div>
-										<div class="text-xs text-gray-300">Accrochés</div>
-									</div>
-									<div class="rounded bg-gray-600 p-3 text-center">
-										{#if player.matchesPlayed > 0}
-											<div class="text-xl font-bold text-purple-400">
-												{((player.defeats / player.matchesPlayed) * 100).toFixed(0)}%
-											</div>
-											<div class="text-xs text-gray-300">Taux défaites</div>
+									<div class="flex items-center gap-2">
+										{#if player.lost}
+											<span class="text-2xl" title="A perdu">💀</span>
 										{:else}
-											<div class="text-xl font-bold text-gray-500">-</div>
-											<div class="text-xs text-gray-300">Taux défaites</div>
+											<span class="text-2xl" title="En vie">✅</span>
+										{/if}
+
+										{#if player.hooked}
+											<span class="text-2xl" title="Accroché">🎣</span>
 										{/if}
 									</div>
 								</div>
 
-								<div class="mb-3 grid grid-cols-2 gap-3">
-									<div class="space-y-2">
-										<div class="text-sm font-medium text-gray-300">Manches & Défaites</div>
-										<div class="flex flex-wrap gap-1">
-											<button
-												on:click={() =>
-													updatePlayerStats(
-														player.name,
-														player.matchesPlayed + 1,
-														player.defeats,
-														player.hooked
-													)}
-												class="rounded bg-blue-600 px-2 py-1 text-xs text-white transition-colors duration-200 hover:bg-blue-700"
-											>
-												+1 M
-											</button>
-											<button
-												on:click={() =>
-													updatePlayerStats(
-														player.name,
-														player.matchesPlayed,
-														player.defeats + 1,
-														player.hooked
-													)}
-												class="rounded bg-red-600 px-2 py-1 text-xs text-white transition-colors duration-200 hover:bg-red-700"
-											>
-												+1 D
-											</button>
-											<button
-												on:click={() =>
-													updatePlayerStats(
-														player.name,
-														Math.max(0, player.matchesPlayed - 1),
-														player.defeats,
-														player.hooked
-													)}
-												class="rounded bg-gray-600 px-2 py-1 text-xs text-white transition-colors duration-200 hover:bg-gray-700"
-												disabled={player.matchesPlayed === 0}
-											>
-												-1 M
-											</button>
-											<button
-												on:click={() =>
-													updatePlayerStats(
-														player.name,
-														player.matchesPlayed,
-														Math.max(0, player.defeats - 1),
-														player.hooked
-													)}
-												class="rounded bg-gray-600 px-2 py-1 text-xs text-white transition-colors duration-200 hover:bg-gray-700"
-												disabled={player.defeats === 0}
-											>
-												-1 D
-											</button>
-										</div>
-									</div>
+								<!-- Actions pour le joueur -->
+								<div class="flex flex-wrap gap-2">
+									<button
+										on:click={() => togglePlayerLost(player.name)}
+										class="rounded px-4 py-2 text-sm font-medium transition-colors {player.lost
+											? 'bg-green-600 text-white hover:bg-green-700'
+											: 'bg-red-600 text-white hover:bg-red-700'}"
+									>
+										{player.lost ? 'Marquer comme gagnant' : 'Marquer comme perdant'}
+									</button>
 
-									<div class="space-y-2">
-										<div class="text-sm font-medium text-gray-300">Accrochages</div>
-										<div class="flex flex-wrap gap-1">
-											<button
-												on:click={() =>
-													updatePlayerStats(
-														player.name,
-														player.matchesPlayed,
-														player.defeats,
-														(player.hooked || 0) + 1
-													)}
-												class="rounded bg-orange-600 px-2 py-1 text-xs text-white transition-colors duration-200 hover:bg-orange-700"
-											>
-												+1 Accroché
-											</button>
-											<button
-												on:click={() =>
-													updatePlayerStats(
-														player.name,
-														player.matchesPlayed,
-														player.defeats,
-														Math.max(0, (player.hooked || 0) - 1)
-													)}
-												class="rounded bg-gray-600 px-2 py-1 text-xs text-white transition-colors duration-200 hover:bg-gray-700"
-												disabled={(player.hooked || 0) === 0}
-											>
-												-1 Accroché
-											</button>
-										</div>
-									</div>
+									<button
+										on:click={() => togglePlayerHooked(player.name)}
+										class="rounded px-4 py-2 text-sm font-medium transition-colors {player.hooked
+											? 'bg-gray-600 text-white hover:bg-gray-700'
+											: 'bg-orange-600 text-white hover:bg-orange-700'}"
+									>
+										{player.hooked ? "Retirer l'accrochage" : 'Marquer comme accroché'}
+									</button>
 								</div>
 							</div>
 						{/each}
@@ -347,6 +324,40 @@
 				{:else}
 					<p class="text-gray-400">Aucun joueur dans cette partie.</p>
 				{/if}
+			</div>
+
+			<!-- Résumé de la partie -->
+			<div class="rounded-lg border border-gray-600 bg-gray-800 p-6">
+				<h3 class="mb-4 text-xl font-semibold text-gray-100">Résumé de la partie</h3>
+				<div class="space-y-2 text-gray-300">
+					<div class="flex justify-between">
+						<span>Gagnants :</span>
+						<span class="font-medium text-green-400">
+							{game.players
+								?.filter((p) => !p.lost)
+								.map((p) => p.name)
+								.join(', ') || 'Aucun'}
+						</span>
+					</div>
+					<div class="flex justify-between">
+						<span>Perdants :</span>
+						<span class="font-medium text-red-400">
+							{game.players
+								?.filter((p) => p.lost)
+								.map((p) => p.name)
+								.join(', ') || 'Aucun'}
+						</span>
+					</div>
+					<div class="flex justify-between">
+						<span>Accrochés :</span>
+						<span class="font-medium text-orange-400">
+							{game.players
+								?.filter((p) => p.hooked)
+								.map((p) => p.name)
+								.join(', ') || 'Aucun'}
+						</span>
+					</div>
+				</div>
 			</div>
 
 			<!-- Section d'actions -->
@@ -357,7 +368,7 @@
 						on:click={goBack}
 						class="rounded-lg bg-blue-500 px-6 py-3 text-white transition-colors duration-200 hover:bg-blue-600"
 					>
-						Créer une nouvelle partie
+						Retour aux groupes
 					</button>
 					<button
 						on:click={copyGameUrl}
@@ -378,8 +389,7 @@
 					</summary>
 					<div class="mt-4 space-y-2 text-sm text-gray-400">
 						<div><strong>ID:</strong> {game.id}</div>
-						<div><strong>Créée le:</strong> {game.createdAt}</div>
-						<div><strong>Modifiée le:</strong> {game.updatedAt}</div>
+						<div><strong>Date:</strong> {game.date}</div>
 						<div><strong>URL:</strong> {$page.url.href}</div>
 					</div>
 				</details>
