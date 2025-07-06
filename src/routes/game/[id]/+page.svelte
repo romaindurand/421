@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import confetti from 'canvas-confetti';
 	import type { PageData } from './$types.js';
 
 	export let data: PageData;
@@ -40,14 +41,43 @@
 	function copyGameId() {
 		if (game?.id) {
 			navigator.clipboard.writeText(game.id);
-			// Optionnel: afficher un message de confirmation
+			triggerConfetti();
 		}
 	}
 
 	function copyGameUrl() {
 		const url = window.location.href;
 		navigator.clipboard.writeText(url);
-		// Optionnel: afficher un message de confirmation
+		triggerConfetti();
+	}
+
+	function triggerConfetti() {
+		// Configuration pour une explosion de confettis
+		confetti({
+			particleCount: 100,
+			spread: 70,
+			origin: { y: 0.6 },
+			colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+		});
+
+		// Ajouter un second effet légèrement décalé
+		setTimeout(() => {
+			confetti({
+				particleCount: 50,
+				angle: 60,
+				spread: 55,
+				origin: { x: 0, y: 0.6 }
+			});
+		}, 150);
+
+		setTimeout(() => {
+			confetti({
+				particleCount: 50,
+				angle: 120,
+				spread: 55,
+				origin: { x: 1, y: 0.6 }
+			});
+		}, 300);
 	}
 
 	async function updatePlayerStats(
@@ -57,7 +87,10 @@
 		hooked?: number
 	) {
 		try {
-			const body = { matchesPlayed, defeats };
+			const body: { matchesPlayed: number; defeats: number; hooked?: number } = {
+				matchesPlayed,
+				defeats
+			};
 			if (hooked !== undefined) {
 				body.hooked = hooked;
 			}

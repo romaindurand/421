@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import confetti from 'canvas-confetti';
 
 	interface Player {
 		name: string;
@@ -108,6 +109,35 @@
 		if (event.key === 'Enter') {
 			addPlayer();
 		}
+	}
+
+	function triggerConfetti() {
+		// Configuration pour une explosion de confettis
+		confetti({
+			particleCount: 100,
+			spread: 70,
+			origin: { y: 0.6 },
+			colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+		});
+
+		// Ajouter un second effet légèrement décalé
+		setTimeout(() => {
+			confetti({
+				particleCount: 50,
+				angle: 60,
+				spread: 55,
+				origin: { x: 0, y: 0.6 }
+			});
+		}, 150);
+
+		setTimeout(() => {
+			confetti({
+				particleCount: 50,
+				angle: 120,
+				spread: 55,
+				origin: { x: 1, y: 0.6 }
+			});
+		}, 300);
 	}
 </script>
 
@@ -238,8 +268,10 @@
 								</svg>
 							</a>
 							<button
-								on:click={() =>
-									navigator.clipboard.writeText(`${window.location.origin}/game/${game.id}`)}
+								on:click={() => {
+									navigator.clipboard.writeText(`${window.location.origin}/game/${game.id}`);
+									triggerConfetti();
+								}}
 								class="inline-flex items-center gap-1 rounded bg-green-600 px-3 py-1 text-sm text-white transition-colors duration-200 hover:bg-green-700"
 								title="Copier le lien de la partie"
 							>
