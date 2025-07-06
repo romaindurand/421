@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+
+/* Force dark mode */
+html {
+	color-scheme: dark;
+}
