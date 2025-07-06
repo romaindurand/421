@@ -1,9 +1,16 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 
+	interface Player {
+		name: string;
+		matchesPlayed: number;
+		defeats: number;
+		hooked: number;
+	}
+
 	interface Game {
 		id: string;
-		players: string[];
+		players: Player[];
 		createdAt: string;
 		updatedAt: string;
 	}
@@ -176,7 +183,9 @@
 			<h2 class="mb-4 text-xl text-gray-300">Parties sauvegardées ({savedGames.length})</h2>
 			<div class="space-y-3">
 				{#each savedGames as game}
-					<div class="group rounded-md border border-gray-600 bg-gray-700 p-4 transition-all duration-200 hover:border-blue-500 hover:bg-gray-600">
+					<div
+						class="group rounded-md border border-gray-600 bg-gray-700 p-4 transition-all duration-200 hover:border-blue-500 hover:bg-gray-600"
+					>
 						<div class="mb-2 flex items-center justify-between">
 							<span class="text-sm text-gray-400">ID: {game.id}</span>
 							<span class="text-sm text-gray-400">
@@ -185,28 +194,63 @@
 								).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
 							</span>
 						</div>
-						<div class="mb-3 text-gray-100">
-							<strong>Joueurs ({game.players.length}):</strong>
-							{game.players.join(', ')}
+						<div class="mb-3">
+							<div class="mb-2 text-gray-100">
+								<strong>Joueurs ({game.players.length}):</strong>
+							</div>
+							<div class="space-y-1">
+								{#each game.players as player}
+									<div class="flex items-center justify-between text-sm">
+										<span class="text-gray-200">{player.name}</span>
+										<div class="flex gap-2 text-xs text-gray-400">
+											<span>M: {player.matchesPlayed}</span>
+											<span>D: {player.defeats}</span>
+											<span>A: {player.hooked || 0}</span>
+											{#if player.matchesPlayed > 0}
+												<span class="text-blue-400">
+													{(
+														((player.matchesPlayed - player.defeats) / player.matchesPlayed) *
+														100
+													).toFixed(0)}% V
+												</span>
+												<span class="text-red-400">
+													{((player.defeats / player.matchesPlayed) * 100).toFixed(0)}% TD
+												</span>
+											{/if}
+										</div>
+									</div>
+								{/each}
+							</div>
 						</div>
-						<div class="flex justify-between items-center">
+						<div class="flex items-center justify-between">
 							<a
 								href="/game/{game.id}"
 								class="inline-flex items-center gap-1 rounded bg-blue-600 px-3 py-1 text-sm text-white transition-colors duration-200 hover:bg-blue-700"
 							>
 								Voir la partie
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M9 5l7 7-7 7"
+									/>
 								</svg>
 							</a>
 							<button
-								on:click={() => navigator.clipboard.writeText(`${window.location.origin}/game/${game.id}`)}
+								on:click={() =>
+									navigator.clipboard.writeText(`${window.location.origin}/game/${game.id}`)}
 								class="inline-flex items-center gap-1 rounded bg-green-600 px-3 py-1 text-sm text-white transition-colors duration-200 hover:bg-green-700"
 								title="Copier le lien de la partie"
 							>
 								Copier lien
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+									/>
 								</svg>
 							</button>
 						</div>

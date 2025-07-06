@@ -5,9 +5,16 @@
 
 	export let data: PageData;
 
+	interface Player {
+		name: string;
+		matchesPlayed: number;
+		defeats: number;
+		hooked: number;
+	}
+
 	interface Game {
 		id: string;
-		players: string[];
+		players: Player[];
 		createdAt: string;
 		updatedAt: string;
 	}
@@ -41,6 +48,40 @@
 		const url = window.location.href;
 		navigator.clipboard.writeText(url);
 		// Optionnel: afficher un message de confirmation
+	}
+
+	async function updatePlayerStats(
+		playerName: string,
+		matchesPlayed: number,
+		defeats: number,
+		hooked?: number
+	) {
+		try {
+			const body = { matchesPlayed, defeats };
+			if (hooked !== undefined) {
+				body.hooked = hooked;
+			}
+
+			const response = await fetch(
+				`/api/games/${game?.id}/players/${encodeURIComponent(playerName)}`,
+				{
+					method: 'PATCH',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify(body)
+				}
+			);
+
+			if (response.ok) {
+				// Recharger les données de la partie
+				window.location.reload();
+			} else {
+				console.error('Erreur lors de la mise à jour des statistiques');
+			}
+		} catch (error) {
+			console.error('Erreur lors de la mise à jour des statistiques:', error);
+		}
 	}
 </script>
 
@@ -118,16 +159,12 @@
 				</div>
 
 				<!-- Statistiques -->
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+				<div class="grid grid-cols-1 gap-4">
 					<div class="rounded-lg bg-gray-700 p-4 text-center">
 						<div class="text-2xl font-bold text-blue-400">{game.players.length}</div>
 						<div class="text-sm text-gray-300">
 							{game.players.length === 1 ? 'Joueur' : 'Joueurs'}
 						</div>
-					</div>
-					<div class="rounded-lg bg-gray-700 p-4 text-center">
-						<div class="text-2xl font-bold text-green-400">En attente</div>
-						<div class="text-sm text-gray-300">Statut de la partie</div>
 					</div>
 				</div>
 			</div>
@@ -137,16 +174,139 @@
 				<h2 class="mb-4 text-2xl font-semibold text-gray-100">
 					Liste des joueurs ({game.players.length})
 				</h2>
-				
+
 				{#if game.players.length > 0}
-					<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+					<div class="space-y-4">
 						{#each game.players as player, index}
-							<div class="flex items-center justify-between rounded-lg border border-gray-600 bg-gray-700 p-4">
-								<div class="flex items-center gap-3">
-									<div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+							<div class="rounded-lg border border-gray-600 bg-gray-700 p-4">
+								<div class="mb-3 flex items-center gap-3">
+									<div
+										class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white"
+									>
 										{index + 1}
 									</div>
-									<span class="font-medium text-gray-100">{player}</span>
+									<div class="flex-1">
+										<h3 class="text-lg font-medium text-gray-100">{player.name}</h3>
+										<div class="text-sm text-gray-400">
+											{player.matchesPlayed} manches, {player.defeats} défaites, {player.hooked ||
+												0} accrochages
+										</div>
+									</div>
+								</div>
+
+								<div class="mb-4 grid grid-cols-4 gap-3">
+									<div class="rounded bg-gray-600 p-3 text-center">
+										<div class="text-xl font-bold text-blue-400">{player.matchesPlayed}</div>
+										<div class="text-xs text-gray-300">Manches</div>
+									</div>
+									<div class="rounded bg-gray-600 p-3 text-center">
+										<div class="text-xl font-bold text-red-400">{player.defeats}</div>
+										<div class="text-xs text-gray-300">Défaites</div>
+									</div>
+									<div class="rounded bg-gray-600 p-3 text-center">
+										<div class="text-xl font-bold text-orange-400">{player.hooked || 0}</div>
+										<div class="text-xs text-gray-300">Accrochés</div>
+									</div>
+									<div class="rounded bg-gray-600 p-3 text-center">
+										{#if player.matchesPlayed > 0}
+											<div class="text-xl font-bold text-purple-400">
+												{((player.defeats / player.matchesPlayed) * 100).toFixed(0)}%
+											</div>
+											<div class="text-xs text-gray-300">Taux défaites</div>
+										{:else}
+											<div class="text-xl font-bold text-gray-500">-</div>
+											<div class="text-xs text-gray-300">Taux défaites</div>
+										{/if}
+									</div>
+								</div>
+
+								<div class="mb-3 grid grid-cols-2 gap-3">
+									<div class="space-y-2">
+										<div class="text-sm font-medium text-gray-300">Manches & Défaites</div>
+										<div class="flex flex-wrap gap-1">
+											<button
+												on:click={() =>
+													updatePlayerStats(
+														player.name,
+														player.matchesPlayed + 1,
+														player.defeats,
+														player.hooked
+													)}
+												class="rounded bg-blue-600 px-2 py-1 text-xs text-white transition-colors duration-200 hover:bg-blue-700"
+											>
+												+1 M
+											</button>
+											<button
+												on:click={() =>
+													updatePlayerStats(
+														player.name,
+														player.matchesPlayed,
+														player.defeats + 1,
+														player.hooked
+													)}
+												class="rounded bg-red-600 px-2 py-1 text-xs text-white transition-colors duration-200 hover:bg-red-700"
+											>
+												+1 D
+											</button>
+											<button
+												on:click={() =>
+													updatePlayerStats(
+														player.name,
+														Math.max(0, player.matchesPlayed - 1),
+														player.defeats,
+														player.hooked
+													)}
+												class="rounded bg-gray-600 px-2 py-1 text-xs text-white transition-colors duration-200 hover:bg-gray-700"
+												disabled={player.matchesPlayed === 0}
+											>
+												-1 M
+											</button>
+											<button
+												on:click={() =>
+													updatePlayerStats(
+														player.name,
+														player.matchesPlayed,
+														Math.max(0, player.defeats - 1),
+														player.hooked
+													)}
+												class="rounded bg-gray-600 px-2 py-1 text-xs text-white transition-colors duration-200 hover:bg-gray-700"
+												disabled={player.defeats === 0}
+											>
+												-1 D
+											</button>
+										</div>
+									</div>
+
+									<div class="space-y-2">
+										<div class="text-sm font-medium text-gray-300">Accrochages</div>
+										<div class="flex flex-wrap gap-1">
+											<button
+												on:click={() =>
+													updatePlayerStats(
+														player.name,
+														player.matchesPlayed,
+														player.defeats,
+														(player.hooked || 0) + 1
+													)}
+												class="rounded bg-orange-600 px-2 py-1 text-xs text-white transition-colors duration-200 hover:bg-orange-700"
+											>
+												+1 Accroché
+											</button>
+											<button
+												on:click={() =>
+													updatePlayerStats(
+														player.name,
+														player.matchesPlayed,
+														player.defeats,
+														Math.max(0, (player.hooked || 0) - 1)
+													)}
+												class="rounded bg-gray-600 px-2 py-1 text-xs text-white transition-colors duration-200 hover:bg-gray-700"
+												disabled={(player.hooked || 0) === 0}
+											>
+												-1 Accroché
+											</button>
+										</div>
+									</div>
 								</div>
 							</div>
 						{/each}
@@ -178,7 +338,9 @@
 			<!-- Informations techniques -->
 			<div class="rounded-lg border border-gray-600 bg-gray-800 p-6">
 				<details class="group">
-					<summary class="cursor-pointer text-lg font-semibold text-gray-100 transition-colors duration-200 group-hover:text-blue-400">
+					<summary
+						class="cursor-pointer text-lg font-semibold text-gray-100 transition-colors duration-200 group-hover:text-blue-400"
+					>
 						Informations techniques
 					</summary>
 					<div class="mt-4 space-y-2 text-sm text-gray-400">

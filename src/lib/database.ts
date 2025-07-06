@@ -4,9 +4,16 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 // Types pour la base de données
+export interface Player {
+	name: string;
+	matchesPlayed: number;
+	defeats: number;
+	hooked: number; // Nombre de fois où le joueur a été "accroché"
+}
+
 export interface Game {
 	id: string;
-	players: string[];
+	players: Player[];
 	createdAt: string;
 	updatedAt: string;
 }
@@ -29,8 +36,16 @@ export async function initDatabase(): Promise<void> {
 }
 
 // Fonction pour créer une nouvelle partie avec des joueurs
-export async function createGame(players: string[]): Promise<Game> {
+export async function createGame(playerNames: string[]): Promise<Game> {
 	await db.read();
+	
+	// Convertir les noms en objets Player
+	const players: Player[] = playerNames.map(name => ({
+		name,
+		matchesPlayed: 0,
+		defeats: 0,
+		hooked: 0
+	}));
 	
 	const newGame: Game = {
 		id: generateId(),
@@ -68,6 +83,94 @@ export async function deleteGame(id: string): Promise<boolean> {
 		return true;
 	}
 	return false;
+}
+
+// Fonction pour mettre à jour les statistiques d'un joueur
+export async function updatePlayerStats(gameId: string, playerName: string, matchesPlayed: number, defeats: number, hooked?: number): Promise<boolean> {
+	await db.read();
+	
+	const game = db.data!.games.find(g => g.id === gameId);
+	if (!game) {
+		return false;
+	}
+	
+	const player = game.players.find(p => p.name === playerName);
+	if (!player) {
+		return false;
+	}
+	
+	player.matchesPlayed = matchesPlayed;
+	player.defeats = defeats;
+	if (hooked !== undefined) {
+		player.hooked = hooked;
+	}
+	game.updatedAt = new Date().toISOString();
+	
+	await db.write();
+	return true;
+}
+
+// Fonction pour incrémenter le nombre de manches jouées d'un joueur
+export async function incrementPlayerMatches(gameId: string, playerName: string): Promise<boolean> {
+	await db.read();
+	
+	const game = db.data!.games.find(g => g.id === gameId);
+	if (!game) {
+		return false;
+	}
+	
+	const player = game.players.find(p => p.name === playerName);
+	if (!player) {
+		return false;
+	}
+	
+	player.matchesPlayed += 1;
+	game.updatedAt = new Date().toISOString();
+	
+	await db.write();
+	return true;
+}
+
+// Fonction pour incrémenter le nombre de défaites d'un joueur
+export async function incrementPlayerDefeats(gameId: string, playerName: string): Promise<boolean> {
+	await db.read();
+	
+	const game = db.data!.games.find(g => g.id === gameId);
+	if (!game) {
+		return false;
+	}
+	
+	const player = game.players.find(p => p.name === playerName);
+	if (!player) {
+		return false;
+	}
+	
+	player.defeats += 1;
+	game.updatedAt = new Date().toISOString();
+	
+	await db.write();
+	return true;
+}
+
+// Fonction pour incrémenter le nombre de fois où un joueur a été accroché
+export async function incrementPlayerHooked(gameId: string, playerName: string): Promise<boolean> {
+	await db.read();
+	
+	const game = db.data!.games.find(g => g.id === gameId);
+	if (!game) {
+		return false;
+	}
+	
+	const player = game.players.find(p => p.name === playerName);
+	if (!player) {
+		return false;
+	}
+	
+	player.hooked += 1;
+	game.updatedAt = new Date().toISOString();
+	
+	await db.write();
+	return true;
 }
 
 // Fonction utilitaire pour générer un ID unique
