@@ -30,7 +30,9 @@
 	let errorMessage = '';
 	let successMessage = '';
 	let isLoading = false;
-	let showNormalizedScore = false; // Toggle pour affichage score normalisé
+
+	// Variables pour le système d'onglets du panneau d'informations
+	let activeTab: 'defeat-rate' | 'normalized-score' | 'hooked-defeat-rate' = 'defeat-rate';
 
 	// Variables pour l'ajout de joueur
 	let newPlayerName = '';
@@ -47,6 +49,46 @@
 
 	// Variables pour Server-Sent Events
 	let eventSource: EventSource | null = null;
+
+	// Fonction pour calculer le taux de défaite classique
+	function calculateDefeatRate(playerName: string): number {
+		let totalGames = 0;
+		let defeats = 0;
+
+		group.games.forEach((game) => {
+			const player = game.players.find((p) => p.name === playerName);
+			if (player) {
+				totalGames++;
+				if (player.lost) {
+					defeats++;
+				}
+			}
+		});
+
+		return totalGames === 0 ? 0 : (defeats / totalGames) * 100;
+	}
+
+	// Fonction pour calculer le taux de défaite uniquement sur les parties où le joueur a été accroché
+	function calculateHookedDefeatRate(playerName: string): { rate: number; hookedGames: number; hookedDefeats: number } {
+		let hookedGames = 0;
+		let hookedDefeats = 0;
+
+		group.games.forEach((game) => {
+			const player = game.players.find((p) => p.name === playerName);
+			if (player && player.hooked) {
+				hookedGames++;
+				if (player.lost) {
+					hookedDefeats++;
+				}
+			}
+		});
+
+		return {
+			rate: hookedGames === 0 ? 0 : (hookedDefeats / hookedGames) * 100,
+			hookedGames,
+			hookedDefeats
+		};
+	}
 
 	// Sélectionner tous les joueurs par défaut et configurer SSE
 	onMount(() => {
@@ -342,24 +384,6 @@
 		}
 	}
 
-	// Fonction pour calculer le taux de défaite d'un joueur
-	function calculateDefeatRate(playerName: string): number {
-		let totalGames = 0;
-		let defeats = 0;
-
-		group.games.forEach((game) => {
-			const player = game.players.find((p) => p.name === playerName);
-			if (player) {
-				totalGames++;
-				if (player.lost) {
-					defeats++;
-				}
-			}
-		});
-
-		return totalGames === 0 ? 0 : (defeats / totalGames) * 100;
-	}
-
 	// Fonction pour calculer le score normalisé qui prend en compte le nombre de joueurs
 	function calculateNormalizedScore(playerName: string): number {
 		let totalWeightedScore = 0;
@@ -386,24 +410,33 @@
 	// Fonction pour obtenir les joueurs triés par taux de défaite ou score normalisé
 	function getPlayersSortedByDefeatRate() {
 		return group.playerNames
-			.map((playerName) => ({
-				name: playerName,
-				defeatRate: calculateDefeatRate(playerName),
-				normalizedScore: calculateNormalizedScore(playerName),
-				totalGames: group.games.filter((game) => game.players.some((p) => p.name === playerName))
-					.length,
-				avgPlayersPerGame:
-					group.games
-						.filter((game) => game.players.some((p) => p.name === playerName))
-						.reduce((sum, game) => sum + game.players.length, 0) /
-					Math.max(
-						1,
-						group.games.filter((game) => game.players.some((p) => p.name === playerName)).length
-					)
-			}))
+			.map((playerName) => {
+				const hookedStats = calculateHookedDefeatRate(playerName);
+				return {
+					name: playerName,
+					defeatRate: calculateDefeatRate(playerName),
+					normalizedScore: calculateNormalizedScore(playerName),
+					hookedDefeatRate: hookedStats.rate,
+					hookedGames: hookedStats.hookedGames,
+					hookedDefeats: hookedStats.hookedDefeats,
+					totalGames: group.games.filter((game) => game.players.some((p) => p.name === playerName))
+						.length,
+					avgPlayersPerGame:
+						group.games
+							.filter((game) => game.players.some((p) => p.name === playerName))
+							.reduce((sum, game) => sum + game.players.length, 0) /
+						Math.max(
+							1,
+							group.games.filter((game) => game.players.some((p) => p.name === playerName)).length
+						)
+				};
+			})
 			.sort((a, b) => {
-				if (showNormalizedScore) {
+				// Tri selon l'onglet actif
+				if (activeTab === 'normalized-score') {
 					return a.normalizedScore - b.normalizedScore;
+				} else if (activeTab === 'hooked-defeat-rate') {
+					return a.hookedDefeatRate - b.hookedDefeatRate;
 				} else {
 					return a.defeatRate - b.defeatRate;
 				}
@@ -617,95 +650,188 @@
 			</div>
 
 			<div class="space-y-4">
-				<div>
-					<div class="mb-3 flex items-center justify-between">
-						<h3 class="text-sm font-medium text-gray-300">Statistiques des joueurs :</h3>
+				<!-- Onglets de navigation -->
+				<div class="border-b border-gray-600">
+					<nav class="-mb-px flex space-x-1" aria-label="Onglets des statistiques">
 						<button
-							on:click={() => (showNormalizedScore = !showNormalizedScore)}
-							class="flex items-center gap-2 rounded-lg px-3 py-1 text-xs transition-colors {showNormalizedScore
-								? 'bg-blue-600 text-white'
-								: 'bg-gray-600 text-gray-200 hover:bg-gray-500'}"
-							title={showNormalizedScore
-								? 'Afficher le taux de défaite brut'
-								: 'Afficher le score normalisé (ajusté selon le nombre de joueurs)'}
+							role="tab"
+							class="whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors {activeTab === 'defeat-rate'
+								? 'border-blue-500 text-blue-400'
+								: 'border-transparent text-gray-400 hover:border-gray-300 hover:text-gray-300'}"
+							on:click={() => (activeTab = 'defeat-rate')}
+							aria-selected={activeTab === 'defeat-rate'}
 						>
-							<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-								/>
-							</svg>
-							{showNormalizedScore ? 'Score normalisé' : 'Taux brut'}
+							📊 Taux de défaite
 						</button>
-					</div>
-					<div class="space-y-2">
-						{#each getPlayersSortedByDefeatRate() as playerStats}
-							<div class="flex items-center justify-between rounded-lg bg-gray-700 p-3">
-								<div class="flex flex-col gap-1">
-									<div class="flex items-center gap-3">
-										<span class="font-medium text-gray-200">{playerStats.name}</span>
-										<span class="text-xs text-gray-400">
-											{playerStats.totalGames} partie{playerStats.totalGames > 1 ? 's' : ''}
-											{#if playerStats.totalGames > 0}
-												• moy. {playerStats.avgPlayersPerGame.toFixed(1)} joueurs
-											{/if}
-										</span>
+						<button
+							role="tab"
+							class="whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors {activeTab === 'normalized-score'
+								? 'border-blue-500 text-blue-400'
+								: 'border-transparent text-gray-400 hover:border-gray-300 hover:text-gray-300'}"
+							on:click={() => (activeTab = 'normalized-score')}
+							aria-selected={activeTab === 'normalized-score'}
+						>
+							⚖️ Score normalisé
+						</button>
+						<button
+							role="tab"
+							class="whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors {activeTab === 'hooked-defeat-rate'
+								? 'border-blue-500 text-blue-400'
+								: 'border-transparent text-gray-400 hover:border-gray-300 hover:text-gray-300'}"
+							on:click={() => (activeTab = 'hooked-defeat-rate')}
+							aria-selected={activeTab === 'hooked-defeat-rate'}
+						>
+							🎣 Défaites accrochées
+						</button>
+					</nav>
+				</div>
+
+				<!-- Contenu des onglets -->
+				<div class="mt-4">
+					{#if activeTab === 'defeat-rate'}
+						<!-- Onglet 1: Taux de défaite classique -->
+						<div>
+							<h3 class="mb-3 text-sm font-medium text-gray-300">Taux de défaite global :</h3>
+							<div class="space-y-2">
+								{#each getPlayersSortedByDefeatRate() as playerStats}
+									<div class="flex items-center justify-between rounded-lg bg-gray-700 p-3">
+										<div class="flex flex-col gap-1">
+											<div class="flex items-center gap-3">
+												<span class="font-medium text-gray-200">{playerStats.name}</span>
+												<span class="text-xs text-gray-400">
+													{playerStats.totalGames} partie{playerStats.totalGames > 1 ? 's' : ''}
+													{#if playerStats.totalGames > 0}
+														• moy. {playerStats.avgPlayersPerGame.toFixed(1)} joueurs
+													{/if}
+												</span>
+											</div>
+										</div>
+										<div class="flex items-center gap-2">
+											<span class="text-sm text-gray-300">
+												{playerStats.defeatRate.toFixed(1)}%
+											</span>
+											<div class="h-2 w-16 overflow-hidden rounded-full bg-gray-600">
+												<div
+													class="h-full bg-gradient-to-r from-green-500 to-red-500 transition-all duration-300"
+													style="width: {playerStats.defeatRate}%"
+												></div>
+											</div>
+										</div>
 									</div>
-									{#if showNormalizedScore && playerStats.totalGames > 0}
-										<div class="text-xs text-gray-500">
-											Taux brut: {playerStats.defeatRate.toFixed(1)}%
-										</div>
-									{/if}
-								</div>
-								<div class="flex items-center gap-2">
-									{#if showNormalizedScore}
-										<span class="text-sm text-gray-300">
-											{playerStats.normalizedScore.toFixed(0)}
-										</span>
-										<div class="h-2 w-16 overflow-hidden rounded-full bg-gray-600">
-											<div
-												class="h-full transition-all duration-300 {playerStats.normalizedScore < 100
-													? 'bg-green-500'
-													: playerStats.normalizedScore > 100
-														? 'bg-red-500'
-														: 'bg-yellow-500'}"
-												style="width: {Math.min(playerStats.normalizedScore, 200) / 2}%"
-											></div>
-										</div>
-									{:else}
-										<span class="text-sm text-gray-300">
-											{playerStats.defeatRate.toFixed(1)}%
-										</span>
-										<div class="h-2 w-16 overflow-hidden rounded-full bg-gray-600">
-											<div
-												class="h-full bg-gradient-to-r from-green-500 to-red-500 transition-all duration-300"
-												style="width: {playerStats.defeatRate}%"
-											></div>
-										</div>
-									{/if}
-								</div>
-							</div>
-						{/each}
-					</div>
-					{#if showNormalizedScore && group.games.length > 0}
-						<div class="mt-3 rounded-lg bg-blue-900/30 p-3 text-xs text-blue-200">
-							<div class="mb-1 font-medium">ℹ️ Score normalisé</div>
-							<div class="space-y-1 text-blue-300">
-								<div>• <strong>&lt; 100</strong> : Meilleur que la moyenne théorique</div>
-								<div>• <strong>= 100</strong> : Conforme à la moyenne théorique</div>
-								<div>• <strong>&gt; 100</strong> : Moins bon que la moyenne théorique</div>
-								<div class="mt-2 text-xs">
-									Ce score ajuste le taux de défaite selon le nombre de joueurs par partie (plus
-									difficile avec moins de joueurs).
-								</div>
+								{/each}
 							</div>
 						</div>
+					{:else if activeTab === 'normalized-score'}
+						<!-- Onglet 2: Score normalisé -->
+						<div>
+							<h3 class="mb-3 text-sm font-medium text-gray-300">Score normalisé (ajusté selon le nombre de joueurs) :</h3>
+							<div class="space-y-2">
+								{#each getPlayersSortedByDefeatRate() as playerStats}
+									<div class="flex items-center justify-between rounded-lg bg-gray-700 p-3">
+										<div class="flex flex-col gap-1">
+											<div class="flex items-center gap-3">
+												<span class="font-medium text-gray-200">{playerStats.name}</span>
+												<span class="text-xs text-gray-400">
+													{playerStats.totalGames} partie{playerStats.totalGames > 1 ? 's' : ''}
+													{#if playerStats.totalGames > 0}
+														• moy. {playerStats.avgPlayersPerGame.toFixed(1)} joueurs
+													{/if}
+												</span>
+											</div>
+											<div class="text-xs text-gray-500">
+												Taux brut: {playerStats.defeatRate.toFixed(1)}%
+											</div>
+										</div>
+										<div class="flex items-center gap-2">
+											<span class="text-sm text-gray-300">
+												{playerStats.normalizedScore.toFixed(0)}
+											</span>
+											<div class="h-2 w-16 overflow-hidden rounded-full bg-gray-600">
+												<div
+													class="h-full transition-all duration-300 {playerStats.normalizedScore < 100
+														? 'bg-green-500'
+														: playerStats.normalizedScore > 100
+															? 'bg-red-500'
+															: 'bg-yellow-500'}"
+													style="width: {Math.min(playerStats.normalizedScore, 200) / 2}%"
+												></div>
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+							{#if group.games.length > 0}
+								<div class="mt-3 rounded-lg bg-blue-900/30 p-3 text-xs text-blue-200">
+									<div class="mb-1 font-medium">ℹ️ Score normalisé</div>
+									<div class="space-y-1 text-blue-300">
+										<div>• <strong>&lt; 100</strong> : Meilleur que la moyenne théorique</div>
+										<div>• <strong>= 100</strong> : Conforme à la moyenne théorique</div>
+										<div>• <strong>&gt; 100</strong> : Moins bon que la moyenne théorique</div>
+										<div class="mt-2 text-xs">
+											Ce score ajuste le taux de défaite selon le nombre de joueurs par partie (plus
+											difficile avec moins de joueurs).
+										</div>
+									</div>
+								</div>
+							{/if}
+						</div>
+					{:else if activeTab === 'hooked-defeat-rate'}
+						<!-- Onglet 3: Taux de défaites sur parties accrochées -->
+						<div>
+							<h3 class="mb-3 text-sm font-medium text-gray-300">Taux de défaite sur parties accrochées uniquement :</h3>
+							<div class="space-y-2">
+								{#each getPlayersSortedByDefeatRate() as playerStats}
+									<div class="flex items-center justify-between rounded-lg bg-gray-700 p-3">
+										<div class="flex flex-col gap-1">
+											<div class="flex items-center gap-3">
+												<span class="font-medium text-gray-200">{playerStats.name}</span>
+												<span class="text-xs text-gray-400">
+													{playerStats.hookedGames} partie{playerStats.hookedGames > 1 ? 's' : ''} accrochée{playerStats.hookedGames > 1 ? 's' : ''}
+													{#if playerStats.hookedGames > 0}
+														• {playerStats.hookedDefeats} défaite{playerStats.hookedDefeats > 1 ? 's' : ''}
+													{/if}
+												</span>
+											</div>
+											<div class="text-xs text-gray-500">
+												Taux global: {playerStats.defeatRate.toFixed(1)}% ({playerStats.totalGames} parties)
+											</div>
+										</div>
+										<div class="flex items-center gap-2">
+											{#if playerStats.hookedGames > 0}
+												<span class="text-sm text-gray-300">
+													{playerStats.hookedDefeatRate.toFixed(1)}%
+												</span>
+												<div class="h-2 w-16 overflow-hidden rounded-full bg-gray-600">
+													<div
+														class="h-full bg-gradient-to-r from-amber-500 to-red-600 transition-all duration-300"
+														style="width: {playerStats.hookedDefeatRate}%"
+													></div>
+												</div>
+											{:else}
+												<span class="text-xs text-gray-500 italic">Jamais accroché</span>
+											{/if}
+										</div>
+									</div>
+								{/each}
+							</div>
+							{#if group.games.length > 0}
+								<div class="mt-3 rounded-lg bg-amber-900/30 p-3 text-xs text-amber-200">
+									<div class="mb-1 font-medium">🎣 Statistiques accrochées</div>
+									<div class="space-y-1 text-amber-300">
+										<div>Cette statistique ne prend en compte que les parties où le joueur a été accroché.</div>
+										<div>Plus ce taux est élevé, plus le joueur a tendance à perdre quand il se fait accrocher.</div>
+										<div class="mt-2 text-xs">
+											Un joueur qui n'apparaît jamais dans cette liste n'a jamais été accroché.
+										</div>
+									</div>
+								</div>
+							{/if}
+						</div>
 					{/if}
+
 					{#if group.games.length === 0}
 						<p class="mt-3 text-sm text-gray-500 italic">
-							Aucune statistique disponible - créez une partie pour voir les taux de défaite
+							Aucune statistique disponible - créez une partie pour voir les statistiques
 						</p>
 					{/if}
 				</div>
