@@ -12,13 +12,16 @@
 		updatedAt: string;
 	}
 
+	// Recevoir les données du serveur
+	export let data: { groups: Group[] };
+	$: savedGroups = data.groups;
+
 	let groupName = '';
 	let groupPassword = '';
 	let playerName = '';
 	let players: string[] = [];
 	let errorMessage = '';
 	let successMessage = '';
-	let savedGroups: Group[] = [];
 	let isLoading = false;
 	let showCreateForm = false;
 
@@ -29,9 +32,9 @@
 	let passwordInput = '';
 	let passwordError = '';
 
-	// Charger les groupes sauvegardés au chargement du composant
-	onMount(async () => {
-		await loadSavedGroups();
+	// Vérifier les redirections d'authentification au chargement
+	onMount(() => {
+		checkForAuthRedirect();
 	});
 
 	function checkForAuthRedirect() {
@@ -59,8 +62,6 @@
 
 			if (result.success) {
 				savedGroups = result.data;
-				// Vérifier les redirections après le chargement des groupes
-				checkForAuthRedirect();
 			} else {
 				console.error('Erreur lors du chargement des groupes:', result.error);
 			}
