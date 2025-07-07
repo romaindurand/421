@@ -35,7 +35,24 @@ export interface DatabaseData {
 
 // Configuration de la base de données
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const file = join(__dirname, '../../data/db.json');
+
+// Fonction pour déterminer le bon chemin de la base de données
+function getDatabasePath(): string {
+	// En production (build), essayer d'abord le chemin relatif au build
+	const productionPath = join(process.cwd(), 'data/db.json');
+	
+	// En développement, utiliser le chemin relatif au fichier source
+	const developmentPath = join(__dirname, '../../data/db.json');
+	
+	// Vérifier si on est en production en regardant si __dirname contient 'build'
+	if (__dirname.includes('build') || process.env.NODE_ENV === 'production') {
+		return productionPath;
+	} else {
+		return developmentPath;
+	}
+}
+
+const file = getDatabasePath();
 const adapter = new JSONFile<DatabaseData>(file);
 const db = new Low(adapter, { groups: [] });
 
@@ -78,19 +95,40 @@ function verifyPassword(password: string, storedHash: string, salt: string): boo
 
 // Fonction pour initialiser la base de données
 export async function initDatabase(): Promise<void> {
+	// Debug des chemins (seulement en développement)
+	if (process.env.NODE_ENV !== 'production') {
+		console.log('🔍 Debug database path:');
+		console.log('  - __dirname:', __dirname);
+		console.log('  - process.cwd():', process.cwd());
+		console.log('  - NODE_ENV:', process.env.NODE_ENV);
+		console.log('  - Database file path:', file);
+	}
+	
 	// Créer le répertoire data si nécessaire
 	try {
 		await mkdir(dirname(file), { recursive: true });
-	} catch {
-		// Le répertoire existe déjà, ignorer l'erreur
+		if (process.env.NODE_ENV !== 'production') {
+			console.log('📁 Directory created/verified:', dirname(file));
+		}
+	} catch (error) {
+		console.error('❌ Error creating directory:', error);
 	}
 	
-	await db.read();
-	db.data ||= { groups: [] };
-	await db.write();
-	
-	// Migrer automatiquement les mots de passe en clair vers des hashes
-	await migratePasswordsToHash();
+	try {
+		await db.read();
+		db.data ||= { groups: [] };
+		await db.write();
+		
+		if (process.env.NODE_ENV !== 'production') {
+			console.log('✅ Database loaded successfully');
+			console.log('  - Number of groups:', db.data.groups.length);
+		}
+		
+		// Migrer automatiquement les mots de passe en clair vers des hashes
+		await migratePasswordsToHash();
+	} catch (error) {
+		console.error('❌ Error reading/writing database:', error);
+	}
 }
 
 // ============= FONCTIONS POUR LES GROUPES =============
