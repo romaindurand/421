@@ -348,11 +348,20 @@
 
 									<button
 										on:click={() => togglePlayerHooked(player.name)}
-										class="rounded px-4 py-2 text-sm font-medium transition-colors {player.hooked
+										disabled={player.lost}
+										class="rounded px-4 py-2 text-sm font-medium transition-colors {player.lost 
+											? 'bg-gray-500 text-gray-300 cursor-not-allowed' 
+											: player.hooked
 											? 'bg-gray-600 text-white hover:bg-gray-700'
 											: 'bg-orange-600 text-white hover:bg-orange-700'}"
+										title={player.lost ? 'Les joueurs perdants sont automatiquement accrochés' : ''}
 									>
-										{player.hooked ? "Retirer l'accrochage" : 'Marquer comme accroché'}
+										{player.lost 
+											? 'Automatiquement accroché' 
+											: player.hooked 
+											? "Retirer l'accrochage" 
+											: 'Marquer comme accroché'
+										}
 									</button>
 								</div>
 							</div>

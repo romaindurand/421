@@ -261,11 +261,18 @@ export async function updatePlayerInGame(gameId: string, playerName: string, los
 				if (lost !== undefined) {
 					if (lost === true) {
 						// Si on marque ce joueur comme perdant, tous les autres deviennent gagnants
+						// et le joueur perdant est automatiquement marqué comme accroché
 						game.players.forEach(p => {
-							p.lost = (p.name === playerName);
+							if (p.name === playerName) {
+								p.lost = true;
+								p.hooked = true; // Automatiquement accroché quand perdant
+							} else {
+								p.lost = false;
+							}
 						});
 					} else {
 						// Si on retire le statut perdant, seul ce joueur change
+						// (on ne modifie pas automatiquement le statut accroché dans ce cas)
 						player.lost = false;
 					}
 				}
