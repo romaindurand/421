@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
-import { updatePlayerInGame } from '$lib/database.js';
+import { updatePlayerInGame, getGameById } from '$lib/database.js';
+import { broadcastEvent } from '$lib/sse.js';
 import type { RequestHandler } from '@sveltejs/kit';
 
 export const PATCH: RequestHandler = async ({ params, request }) => {
@@ -36,6 +37,20 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 		
 		if (!success) {
 			return json({ success: false, error: 'Erreur lors de la mise à jour' }, { status: 500 });
+		}
+
+		// Récupérer la partie mise à jour pour l'envoyer via SSE
+		const updatedGameResult = await getGameById(id);
+		if (updatedGameResult) {
+			// Émettre un événement SSE pour notifier tous les clients
+			broadcastEvent({
+				type: 'game-updated',
+				data: {
+					gameId: id,
+					groupId: updatedGameResult.group.id,
+					game: updatedGameResult.game
+				}
+			});
 		}
 
 		return json({ success: true, message: 'Statut du joueur mis à jour avec succès' });

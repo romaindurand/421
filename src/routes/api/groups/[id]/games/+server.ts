@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { createGameInGroup, initDatabase } from '$lib/database.js';
+import { broadcastEvent } from '$lib/sse.js';
 import type { RequestHandler } from '@sveltejs/kit';
 
 // Initialiser la base de données
@@ -41,6 +42,16 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				{ status: 404 }
 			);
 		}
+
+		// Émettre un événement SSE pour notifier tous les clients
+		broadcastEvent({
+			type: 'game-created',
+			data: {
+				gameId: game.id,
+				groupId: groupId,
+				game: game
+			}
+		});
 
 		return json({ success: true, data: game });
 	} catch (error) {

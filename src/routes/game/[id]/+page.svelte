@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { onMount, onDestroy } from 'svelte';
 	import confetti from 'canvas-confetti';
 	import type { PageData } from './$types.js';
 
@@ -21,6 +22,63 @@
 	$: game = data.game as Game | undefined;
 	$: groupId = data.groupId as string | undefined;
 	$: error = data.error as string | undefined;
+
+	// Variables pour Server-Sent Events
+	let eventSource: EventSource | null = null;
+
+	onMount(() => {
+		setupSSE();
+	});
+
+	onDestroy(() => {
+		if (eventSource) {
+			eventSource.close();
+		}
+	});
+
+	function setupSSE() {
+		if (!game) return;
+
+		// Connecter aux Server-Sent Events
+		eventSource = new EventSource('/api/events');
+
+		eventSource.onmessage = (event) => {
+			try {
+				const data = JSON.parse(event.data);
+				handleSSEEvent(data);
+			} catch (error) {
+				console.error("Erreur lors du parsing de l'événement SSE:", error);
+			}
+		};
+
+		eventSource.onerror = (error) => {
+			console.error('Erreur SSE:', error);
+		};
+	}
+
+	function handleSSEEvent(event: any) {
+		if (!game) return;
+
+		switch (event.type) {
+			case 'game-updated':
+				if (event.data.gameId === game.id) {
+					// Mettre à jour la partie
+					game = event.data.game;
+				}
+				break;
+
+			case 'game-deleted':
+				if (event.data.gameId === game.id) {
+					// Rediriger vers le groupe si la partie est supprimée
+					if (groupId) {
+						goto(`/group/${groupId}`);
+					} else {
+						goto('/');
+					}
+				}
+				break;
+		}
+	}
 
 	function formatDate(dateString: string): string {
 		const date = new Date(dateString);
@@ -71,24 +129,8 @@
 			const result = await response.json();
 
 			if (result.success) {
-				// Mettre à jour l'état local selon la logique "un seul perdant"
-				const targetPlayer = game.players.find((p) => p.name === playerName);
-				if (targetPlayer) {
-					const newLostStatus = !targetPlayer.lost;
-
-					if (newLostStatus) {
-						// Si on marque ce joueur comme perdant, tous les autres deviennent gagnants
-						game.players.forEach((p) => {
-							p.lost = p.name === playerName;
-						});
-					} else {
-						// Si on retire le statut perdant, seul ce joueur change
-						targetPlayer.lost = false;
-					}
-
-					game = { ...game }; // Force reactivity
-				}
 				triggerConfetti();
+				// Note: SSE va gérer la mise à jour de l'état
 			} else {
 				console.error('Erreur lors de la mise à jour:', result.error);
 			}
@@ -114,13 +156,8 @@
 			const result = await response.json();
 
 			if (result.success) {
-				// Mettre à jour l'état local
-				const playerIndex = game.players.findIndex((p) => p.name === playerName);
-				if (playerIndex !== -1) {
-					game.players[playerIndex].hooked = !game.players[playerIndex].hooked;
-					game = { ...game }; // Force reactivity
-				}
 				triggerConfetti();
+				// Note: SSE va gérer la mise à jour de l'état
 			} else {
 				console.error('Erreur lors de la mise à jour:', result.error);
 			}

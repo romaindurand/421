@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import confetti from 'canvas-confetti';
 	import { slide } from 'svelte/transition';
@@ -38,10 +38,75 @@
 	let deleteInterval: NodeJS.Timeout | null = null;
 	let disappearingGames: Set<string> = new Set();
 
-	// Sélectionner tous les joueurs par défaut
+	// Variables pour Server-Sent Events
+	let eventSource: EventSource | null = null;
+
+	// Sélectionner tous les joueurs par défaut et configurer SSE
 	onMount(() => {
 		selectedPlayers = [...group.playerNames];
+		setupSSE();
 	});
+
+	onDestroy(() => {
+		if (eventSource) {
+			eventSource.close();
+		}
+	});
+
+	function setupSSE() {
+		// Connecter aux Server-Sent Events
+		eventSource = new EventSource('/api/events');
+
+		eventSource.onmessage = (event) => {
+			try {
+				const data = JSON.parse(event.data);
+				handleSSEEvent(data);
+			} catch (error) {
+				console.error("Erreur lors du parsing de l'événement SSE:", error);
+			}
+		};
+
+		eventSource.onerror = (error) => {
+			console.error('Erreur SSE:', error);
+		};
+	}
+
+	function handleSSEEvent(event: any) {
+		switch (event.type) {
+			case 'game-created':
+				if (event.data.groupId === group.id) {
+					// Ajouter la nouvelle partie à la liste
+					group.games = [...group.games, event.data.game];
+					successMessage = 'Nouvelle partie créée !';
+					setTimeout(() => {
+						successMessage = '';
+					}, 3000);
+				}
+				break;
+
+			case 'game-updated':
+				if (event.data.groupId === group.id) {
+					// Mettre à jour la partie existante
+					const gameIndex = group.games.findIndex((g) => g.id === event.data.gameId);
+					if (gameIndex !== -1) {
+						group.games[gameIndex] = event.data.game;
+						group.games = [...group.games]; // Force reactivity
+					}
+				}
+				break;
+
+			case 'game-deleted':
+				if (event.data.groupId === group.id) {
+					// Supprimer la partie de la liste
+					group.games = group.games.filter((g) => g.id !== event.data.gameId);
+					successMessage = 'Partie supprimée !';
+					setTimeout(() => {
+						successMessage = '';
+					}, 3000);
+				}
+				break;
+		}
+	}
 
 	function togglePlayer(playerName: string) {
 		if (selectedPlayers.includes(playerName)) {
@@ -92,7 +157,7 @@
 					origin: { y: 0.6 }
 				});
 
-				// Redirect to the game page
+				// Redirect to the game page (SSE va notifier les autres utilisateurs)
 				setTimeout(() => {
 					window.location.href = `/game/${result.data.id}`;
 				}, 1500);
@@ -143,10 +208,6 @@
 
 	async function executeDeleteGame(gameId: string) {
 		try {
-			// Marquer la partie comme en train de disparaître
-			disappearingGames.add(gameId);
-			disappearingGames = disappearingGames; // Déclencher la réactivité
-
 			const response = await fetch(`/api/games/${gameId}`, {
 				method: 'DELETE'
 			});
@@ -154,8 +215,6 @@
 			const result = await response.json();
 
 			if (result.success) {
-				successMessage = 'Partie supprimée avec succès';
-
 				// Trigger confetti
 				confetti({
 					particleCount: 50,
@@ -163,24 +222,12 @@
 					origin: { y: 0.6 },
 					colors: ['#ef4444', '#f97316']
 				});
-
-				// Attendre un peu pour l'animation, puis supprimer de la liste locale
-				setTimeout(() => {
-					group.games = group.games.filter((game) => game.id !== gameId);
-					disappearingGames.delete(gameId);
-					disappearingGames = disappearingGames; // Déclencher la réactivité
-				}, 500);
+				// Note: SSE va gérer la mise à jour de la liste des parties
 			} else {
-				// En cas d'erreur, retirer le marqueur de disparition
-				disappearingGames.delete(gameId);
-				disappearingGames = disappearingGames;
 				errorMessage = result.error || 'Erreur lors de la suppression de la partie';
 			}
 		} catch (error) {
 			console.error('Erreur lors de la suppression de la partie:', error);
-			// En cas d'erreur, retirer le marqueur de disparition
-			disappearingGames.delete(gameId);
-			disappearingGames = disappearingGames;
 			errorMessage = 'Erreur lors de la suppression de la partie';
 		}
 
