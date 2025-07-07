@@ -259,6 +259,23 @@
 			minute: '2-digit'
 		});
 	}
+
+	async function logout() {
+		try {
+			const response = await fetch(`/api/groups/${group.id}/logout`, {
+				method: 'POST'
+			});
+
+			if (response.ok) {
+				// Rediriger vers la page d'accueil après la déconnexion
+				window.location.href = '/';
+			} else {
+				console.error('Erreur lors de la déconnexion');
+			}
+		} catch (error) {
+			console.error('Erreur lors de la déconnexion:', error);
+		}
+	}
 </script>
 
 <svelte:head>
@@ -268,7 +285,7 @@
 <div class="mx-auto min-h-screen max-w-4xl bg-gray-900 p-8 font-sans text-gray-100">
 	<!-- En-tête -->
 	<div class="mb-8">
-		<div class="mb-4">
+		<div class="mb-4 flex items-center justify-between">
 			<a
 				href="/"
 				class="inline-flex w-fit items-center gap-2 rounded-lg bg-gray-700 px-4 py-2 text-gray-100 transition-colors duration-200 hover:bg-gray-600"
@@ -283,6 +300,22 @@
 				</svg>
 				Retour aux groupes
 			</a>
+
+			<button
+				on:click={logout}
+				class="inline-flex w-fit items-center gap-2 rounded-lg bg-red-700 px-4 py-2 text-red-100 transition-colors duration-200 hover:bg-red-600"
+				title="Se déconnecter de ce groupe"
+			>
+				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+					/>
+				</svg>
+				Se déconnecter
+			</button>
 		</div>
 		<h1 class="mb-2 text-3xl font-bold text-gray-100">{group.name}</h1>
 		<div class="flex items-center gap-4 text-sm text-gray-400">

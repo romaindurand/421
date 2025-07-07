@@ -7,7 +7,7 @@ import type { RequestHandler } from '@sveltejs/kit';
 await initDatabase();
 
 // POST - Créer une nouvelle partie dans un groupe
-export const POST: RequestHandler = async ({ params, request }) => {
+export const POST: RequestHandler = async ({ params, request, cookies }) => {
 	try {
 		const { id: groupId } = params;
 		
@@ -15,6 +15,16 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			return json(
 				{ success: false, error: 'ID du groupe requis' },
 				{ status: 400 }
+			);
+		}
+
+		// Vérifier l'authentification pour ce groupe
+		const sessionCookie = cookies.get(`group_access_${groupId}`);
+		
+		if (!sessionCookie || sessionCookie !== 'authenticated') {
+			return json(
+				{ success: false, error: 'Accès non autorisé' },
+				{ status: 401 }
 			);
 		}
 

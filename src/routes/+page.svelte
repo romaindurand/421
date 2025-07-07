@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import confetti from 'canvas-confetti';
 
 	interface Group {
@@ -12,6 +13,7 @@
 	}
 
 	let groupName = '';
+	let groupPassword = '';
 	let playerName = '';
 	let players: string[] = [];
 	let errorMessage = '';
@@ -20,10 +22,35 @@
 	let isLoading = false;
 	let showCreateForm = false;
 
+	// Variables pour la modal de mot de passe
+	let showPasswordModal = false;
+	let selectedGroupId = '';
+	let selectedGroupName = '';
+	let passwordInput = '';
+	let passwordError = '';
+
 	// Charger les groupes sauvegardés au chargement du composant
 	onMount(async () => {
 		await loadSavedGroups();
 	});
+
+	function checkForAuthRedirect() {
+		const urlParams = new URLSearchParams(window.location.search);
+		const groupId = urlParams.get('group');
+		const authRequired = urlParams.get('auth');
+
+		if (groupId && authRequired === 'required') {
+			// Trouver le nom du groupe
+			const group = savedGroups.find((g) => g.id === groupId);
+			if (group) {
+				// Ouvrir automatiquement la modal de mot de passe
+				openPasswordModal(groupId, group.name);
+			}
+
+			// Nettoyer l'URL
+			window.history.replaceState({}, '', '/');
+		}
+	}
 
 	async function loadSavedGroups() {
 		try {
@@ -32,6 +59,8 @@
 
 			if (result.success) {
 				savedGroups = result.data;
+				// Vérifier les redirections après le chargement des groupes
+				checkForAuthRedirect();
 			} else {
 				console.error('Erreur lors du chargement des groupes:', result.error);
 			}
@@ -66,6 +95,11 @@
 			return;
 		}
 
+		if (groupPassword.trim() === '') {
+			errorMessage = 'Veuillez entrer un mot de passe';
+			return;
+		}
+
 		if (players.length < 2) {
 			errorMessage = 'Il faut au moins 2 joueurs pour créer un groupe';
 			return;
@@ -82,6 +116,7 @@
 				},
 				body: JSON.stringify({
 					name: groupName.trim(),
+					password: groupPassword.trim(),
 					playerNames: players
 				})
 			});
@@ -100,6 +135,7 @@
 
 				// Reset form
 				groupName = '';
+				groupPassword = '';
 				players = [];
 				showCreateForm = false;
 
@@ -167,6 +203,86 @@
 			console.error('Erreur lors de la copie:', err);
 		}
 	}
+
+	function openPasswordModal(groupId: string, groupName: string) {
+		selectedGroupId = groupId;
+		selectedGroupName = groupName;
+		passwordInput = '';
+		passwordError = '';
+		showPasswordModal = true;
+	}
+
+	function closePasswordModal() {
+		showPasswordModal = false;
+		selectedGroupId = '';
+		selectedGroupName = '';
+		passwordInput = '';
+		passwordError = '';
+	}
+
+	async function verifyPasswordAndAccess() {
+		if (!passwordInput.trim()) {
+			passwordError = 'Veuillez entrer le mot de passe';
+			return;
+		}
+
+		try {
+			const response = await fetch(`/api/groups/${selectedGroupId}/verify-password`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					password: passwordInput.trim()
+				})
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				// Mot de passe correct, rediriger vers le groupe
+				console.log('Mot de passe correct, redirection vers le groupe...');
+				// Petit délai pour s'assurer que le cookie est bien enregistré
+				await new Promise((resolve) => setTimeout(resolve, 100));
+				await goto(`/group/${selectedGroupId}`);
+			} else {
+				passwordError = result.error || 'Mot de passe incorrect';
+			}
+		} catch (error) {
+			console.error('Erreur lors de la vérification du mot de passe:', error);
+			passwordError = 'Erreur lors de la vérification';
+		}
+	}
+
+	async function checkAuthAndAccess(groupId: string, groupName: string) {
+		try {
+			// Essayer d'abord d'accéder directement au groupe
+			console.log(`Vérification de l'accès au groupe ${groupId}...`);
+
+			const response = await fetch(`/api/groups/${groupId}`, {
+				method: 'GET',
+				credentials: 'include' // Important pour inclure les cookies
+			});
+
+			if (response.ok) {
+				// L'utilisateur a déjà accès, rediriger directement
+				console.log('Accès autorisé, redirection directe...');
+				await goto(`/group/${groupId}`);
+			} else if (response.status === 401) {
+				// Non autorisé, ouvrir la modal de mot de passe
+				console.log('Authentification requise, ouverture de la modal...');
+				openPasswordModal(groupId, groupName);
+			} else {
+				// Autre erreur
+				console.error('Erreur lors de la vérification:', response.status);
+				errorMessage = "Erreur lors de l'accès au groupe";
+			}
+		} catch (error) {
+			console.error("Erreur lors de la vérification de l'accès:", error);
+			// En cas d'erreur réseau, ouvrir la modal par sécurité
+			openPasswordModal(groupId, groupName);
+		}
+	}
 </script>
 
 <div class="mx-auto min-h-screen max-w-4xl bg-gray-900 p-8 font-sans text-gray-100">
@@ -213,6 +329,22 @@
 					maxlength="50"
 					class="w-full rounded-lg border-2 border-gray-600 bg-gray-700 px-3 py-3 text-gray-100 focus:border-blue-400 focus:outline-none"
 				/>
+			</div>
+
+			<!-- Mot de passe du groupe -->
+			<div class="mb-4">
+				<label for="groupPassword" class="mb-2 block text-sm font-medium text-gray-300">
+					Mot de passe du groupe
+				</label>
+				<input
+					id="groupPassword"
+					type="password"
+					bind:value={groupPassword}
+					placeholder="Entrez un mot de passe"
+					maxlength="50"
+					class="w-full rounded-lg border-2 border-gray-600 bg-gray-700 px-3 py-3 text-gray-100 focus:border-blue-400 focus:outline-none"
+				/>
+				<p class="mt-1 text-xs text-gray-400">Ce mot de passe sera requis pour accéder au groupe</p>
 			</div>
 
 			<!-- Ajout de joueurs -->
@@ -267,6 +399,7 @@
 					on:click={() => {
 						showCreateForm = false;
 						groupName = '';
+						groupPassword = '';
 						players = [];
 						playerName = '';
 						errorMessage = '';
@@ -277,7 +410,10 @@
 				</button>
 				<button
 					on:click={createGroup}
-					disabled={isLoading || groupName.trim() === '' || players.length < 2}
+					disabled={isLoading ||
+						groupName.trim() === '' ||
+						groupPassword.trim() === '' ||
+						players.length < 2}
 					class="rounded-lg bg-blue-600 px-6 py-3 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-600"
 				>
 					{isLoading ? 'Création...' : 'Créer le groupe'}
@@ -339,15 +475,59 @@
 
 					<!-- Bouton d'accès au groupe -->
 					<div class="flex justify-end">
-						<a
-							href="/group/{group.id}"
+						<button
+							on:click={() => checkAuthAndAccess(group.id, group.name)}
 							class="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition-colors hover:bg-blue-700"
 						>
-							Gérer le groupe →
-						</a>
+							Accéder au groupe →
+						</button>
 					</div>
 				</div>
 			{/each}
 		{/if}
 	</div>
 </div>
+
+<!-- Modal de saisie du mot de passe -->
+{#if showPasswordModal}
+	<div class="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
+		<div class="w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-6">
+			<h3 class="mb-4 text-xl font-semibold text-gray-200">
+				Accès au groupe "{selectedGroupName}"
+			</h3>
+
+			<div class="mb-4">
+				<label for="passwordInput" class="mb-2 block text-sm font-medium text-gray-300">
+					Mot de passe :
+				</label>
+				<input
+					id="passwordInput"
+					type="password"
+					bind:value={passwordInput}
+					on:keydown={(e) => e.key === 'Enter' && verifyPasswordAndAccess()}
+					placeholder="Entrez le mot de passe du groupe"
+					class="w-full rounded-lg border-2 border-gray-600 bg-gray-700 px-3 py-3 text-gray-100 focus:border-blue-400 focus:outline-none"
+				/>
+				{#if passwordError}
+					<p class="mt-2 text-sm text-red-400">{passwordError}</p>
+				{/if}
+			</div>
+
+			<div class="flex justify-end gap-3">
+				<button
+					on:click={closePasswordModal}
+					class="rounded-lg bg-gray-600 px-4 py-2 text-white transition-colors hover:bg-gray-700"
+				>
+					Annuler
+				</button>
+				<button
+					on:click={verifyPasswordAndAccess}
+					disabled={!passwordInput.trim()}
+					class="rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-600"
+				>
+					Accéder
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}

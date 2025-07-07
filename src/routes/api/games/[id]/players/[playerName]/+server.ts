@@ -3,7 +3,7 @@ import { updatePlayerInGame, getGameById } from '$lib/database.js';
 import { broadcastEvent } from '$lib/sse.js';
 import type { RequestHandler } from '@sveltejs/kit';
 
-export const PATCH: RequestHandler = async ({ params, request }) => {
+export const PATCH: RequestHandler = async ({ params, request, cookies }) => {
 	try {
 		const { id, playerName } = params;
 		const { action } = await request.json();
@@ -20,6 +20,13 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 		const gameResult = await import('$lib/database.js').then(db => db.getGameById(id));
 		if (!gameResult) {
 			return json({ success: false, error: 'Partie non trouvée' }, { status: 404 });
+		}
+
+		// Vérifier l'authentification pour le groupe de cette partie
+		const sessionCookie = cookies.get(`group_access_${gameResult.group.id}`);
+		
+		if (!sessionCookie || sessionCookie !== 'authenticated') {
+			return json({ success: false, error: 'Accès non autorisé' }, { status: 401 });
 		}
 
 		const player = gameResult.game.players.find(p => p.name === decodeURIComponent(playerName));

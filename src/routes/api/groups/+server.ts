@@ -9,7 +9,10 @@ await initDatabase();
 export const GET: RequestHandler = async () => {
 	try {
 		const groups = await getAllGroups();
-		return json({ success: true, data: groups });
+		// Retirer les mots de passe des données envoyées au client
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const groupsWithoutPasswords = groups.map(({ password, ...group }) => group);
+		return json({ success: true, data: groupsWithoutPasswords });
 	} catch (error) {
 		console.error('Erreur lors de la récupération des groupes:', error);
 		return json(
@@ -22,11 +25,11 @@ export const GET: RequestHandler = async () => {
 // POST - Créer un nouveau groupe
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		const { name, playerNames } = await request.json();
+		const { name, password, playerNames } = await request.json();
 
-		if (!name || !playerNames || !Array.isArray(playerNames)) {
+		if (!name || !password || !playerNames || !Array.isArray(playerNames)) {
 			return json(
-				{ success: false, error: 'Nom du groupe et liste de joueurs requis' },
+				{ success: false, error: 'Nom du groupe, mot de passe et liste de joueurs requis' },
 				{ status: 400 }
 			);
 		}
@@ -38,8 +41,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 		}
 
-		const group = await createGroup(name, playerNames);
-		return json({ success: true, data: group });
+		const group = await createGroup(name, password, playerNames);
+		// Retirer le mot de passe des données retournées
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { password: _, ...groupWithoutPassword } = group;
+		return json({ success: true, data: groupWithoutPassword });
 	} catch (error) {
 		console.error('Erreur lors de la création du groupe:', error);
 		return json(

@@ -6,7 +6,7 @@ import type { RequestHandler } from '@sveltejs/kit';
 await initDatabase();
 
 // GET - Récupérer un groupe par ID
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async ({ params, cookies }) => {
 	try {
 		const { id } = params;
 		
@@ -14,6 +14,16 @@ export const GET: RequestHandler = async ({ params }) => {
 			return json(
 				{ success: false, error: 'ID du groupe requis' },
 				{ status: 400 }
+			);
+		}
+
+		// Vérifier l'authentification pour ce groupe
+		const sessionCookie = cookies.get(`group_access_${id}`);
+		
+		if (!sessionCookie || sessionCookie !== 'authenticated') {
+			return json(
+				{ success: false, error: 'Accès non autorisé' },
+				{ status: 401 }
 			);
 		}
 
@@ -26,7 +36,11 @@ export const GET: RequestHandler = async ({ params }) => {
 			);
 		}
 
-		return json({ success: true, data: group });
+		// Retourner les données du groupe sans le mot de passe
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { password, ...groupData } = group;
+
+		return json({ success: true, data: groupData });
 	} catch (error) {
 		console.error('Erreur lors de la récupération du groupe:', error);
 		return json(
@@ -37,7 +51,7 @@ export const GET: RequestHandler = async ({ params }) => {
 };
 
 // DELETE - Supprimer un groupe
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async ({ params, cookies }) => {
 	try {
 		const { id } = params;
 		
@@ -45,6 +59,16 @@ export const DELETE: RequestHandler = async ({ params }) => {
 			return json(
 				{ success: false, error: 'ID du groupe requis' },
 				{ status: 400 }
+			);
+		}
+
+		// Vérifier l'authentification pour ce groupe
+		const sessionCookie = cookies.get(`group_access_${id}`);
+		
+		if (!sessionCookie || sessionCookie !== 'authenticated') {
+			return json(
+				{ success: false, error: 'Accès non autorisé' },
+				{ status: 401 }
 			);
 		}
 
@@ -56,6 +80,9 @@ export const DELETE: RequestHandler = async ({ params }) => {
 				{ status: 404 }
 			);
 		}
+
+		// Supprimer le cookie de session lors de la suppression du groupe
+		cookies.delete(`group_access_${id}`, { path: '/' });
 
 		return json({ success: true });
 	} catch (error) {

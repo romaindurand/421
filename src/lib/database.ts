@@ -2,6 +2,8 @@ import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { mkdir } from 'fs/promises';
+import { createHash, randomBytes } from 'node:crypto';
 
 // Types pour la base de données
 export interface PlayerInGame {
@@ -19,6 +21,8 @@ export interface Game {
 export interface Group {
 	id: string;
 	name: string;
+	password: string; // Hash du mot de passe
+	passwordSalt: string; // Salt pour le hachage
 	playerNames: string[];
 	games: Game[];
 	createdAt: string;
@@ -35,22 +39,74 @@ const file = join(__dirname, '../../data/db.json');
 const adapter = new JSONFile<DatabaseData>(file);
 const db = new Low(adapter, { groups: [] });
 
+// ============= FONCTIONS DE SÉCURITÉ POUR LES MOTS DE PASSE =============
+
+/**
+ * Génère un salt aléatoire
+ */
+function generateSalt(): string {
+	return randomBytes(16).toString('hex');
+}
+
+/**
+ * Hache un mot de passe avec un salt
+ */
+function hashPassword(password: string, salt: string): string {
+	return createHash('sha256')
+		.update(password + salt)
+		.digest('hex');
+}
+
+/**
+ * Hache un mot de passe avec un nouveau salt
+ */
+function hashPasswordWithSalt(password: string): { hash: string; salt: string } {
+	const salt = generateSalt();
+	const hash = hashPassword(password, salt);
+	return { hash, salt };
+}
+
+/**
+ * Vérifie un mot de passe contre un hash stocké
+ */
+function verifyPassword(password: string, storedHash: string, salt: string): boolean {
+	const hashToVerify = hashPassword(password, salt);
+	return hashToVerify === storedHash;
+}
+
+// ============= FONCTIONS POUR LA BASE DE DONNÉES =============
+
 // Fonction pour initialiser la base de données
 export async function initDatabase(): Promise<void> {
+	// Créer le répertoire data si nécessaire
+	try {
+		await mkdir(dirname(file), { recursive: true });
+	} catch {
+		// Le répertoire existe déjà, ignorer l'erreur
+	}
+	
 	await db.read();
 	db.data ||= { groups: [] };
 	await db.write();
+	
+	// Migrer automatiquement les mots de passe en clair vers des hashes
+	await migratePasswordsToHash();
 }
 
 // ============= FONCTIONS POUR LES GROUPES =============
 
 // Fonction pour créer un nouveau groupe avec des joueurs
-export async function createGroup(name: string, playerNames: string[]): Promise<Group> {
+export async function createGroup(name: string, password: string, playerNames: string[]): Promise<Group> {
 	await db.read();
+	
+	// Hacher le mot de passe avec un salt
+	const { hash, salt } = hashPasswordWithSalt(password);
 	
 	const newGroup: Group = {
 		id: generateId(),
 		name,
+		password: hash, // Stocker le hash au lieu du mot de passe en clair
+		passwordSalt: salt, // Stocker le salt
 		playerNames,
 		games: [],
 		createdAt: new Date().toISOString(),
@@ -73,6 +129,19 @@ export async function getAllGroups(): Promise<Group[]> {
 export async function getGroupById(id: string): Promise<Group | undefined> {
 	await db.read();
 	return db.data!.groups.find(group => group.id === id);
+}
+
+// Fonction pour vérifier le mot de passe d'un groupe
+export async function verifyGroupPassword(id: string, password: string): Promise<boolean> {
+	await db.read();
+	const group = db.data!.groups.find(group => group.id === id);
+	
+	if (!group) {
+		return false;
+	}
+	
+	// Vérifier le mot de passe avec le hash et le salt stockés
+	return verifyPassword(password, group.password, group.passwordSalt);
 }
 
 // Fonction pour supprimer un groupe
@@ -189,6 +258,40 @@ export async function deleteGame(gameId: string): Promise<boolean> {
 	}
 	
 	return false;
+}
+
+// ============= FONCTIONS DE MIGRATION =============
+
+/**
+ * Migre les mots de passe en clair vers des mots de passe hachés
+ */
+export async function migratePasswordsToHash(): Promise<number> {
+	await db.read();
+	
+	let migratedCount = 0;
+	
+	for (const group of db.data!.groups) {
+		// Vérifier si le groupe a déjà un salt (donc déjà migré)
+		if (!group.passwordSalt) {
+			console.log(`Migration du mot de passe pour le groupe: ${group.name}`);
+			
+			// Le mot de passe est en clair, le hacher
+			const { hash, salt } = hashPasswordWithSalt(group.password);
+			
+			group.password = hash;
+			group.passwordSalt = salt;
+			group.updatedAt = new Date().toISOString();
+			
+			migratedCount++;
+		}
+	}
+	
+	if (migratedCount > 0) {
+		await db.write();
+		console.log(`Migration terminée: ${migratedCount} groupe(s) migré(s)`);
+	}
+	
+	return migratedCount;
 }
 
 // Fonction utilitaire pour générer un ID unique

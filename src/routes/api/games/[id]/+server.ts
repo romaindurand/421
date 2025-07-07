@@ -3,7 +3,7 @@ import { getGameById, deleteGame } from '$lib/database.js';
 import { broadcastEvent } from '$lib/sse.js';
 import type { RequestHandler } from '@sveltejs/kit';
 
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async ({ params, cookies }) => {
 	try {
 		const { id } = params;
 		
@@ -17,6 +17,13 @@ export const GET: RequestHandler = async ({ params }) => {
 			return json({ success: false, error: 'Partie non trouvée' }, { status: 404 });
 		}
 
+		// Vérifier l'authentification pour le groupe de cette partie
+		const sessionCookie = cookies.get(`group_access_${result.group.id}`);
+		
+		if (!sessionCookie || sessionCookie !== 'authenticated') {
+			return json({ success: false, error: 'Accès non autorisé' }, { status: 401 });
+		}
+
 		return json({ success: true, data: { game: result.game, groupId: result.group.id } });
 	} catch (error) {
 		console.error('Erreur lors de la récupération de la partie:', error);
@@ -24,7 +31,7 @@ export const GET: RequestHandler = async ({ params }) => {
 	}
 };
 
-export const DELETE: RequestHandler = async ({ params }) => {
+export const DELETE: RequestHandler = async ({ params, cookies }) => {
 	try {
 		const { id } = params;
 		
@@ -36,6 +43,13 @@ export const DELETE: RequestHandler = async ({ params }) => {
 		const gameResult = await getGameById(id);
 		if (!gameResult) {
 			return json({ success: false, error: 'Partie non trouvée' }, { status: 404 });
+		}
+
+		// Vérifier l'authentification pour le groupe de cette partie
+		const sessionCookie = cookies.get(`group_access_${gameResult.group.id}`);
+		
+		if (!sessionCookie || sessionCookie !== 'authenticated') {
+			return json({ success: false, error: 'Accès non autorisé' }, { status: 401 });
 		}
 
 		const success = await deleteGame(id);
