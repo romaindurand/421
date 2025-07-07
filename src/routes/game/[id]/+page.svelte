@@ -72,20 +72,20 @@
 
 			if (result.success) {
 				// Mettre à jour l'état local selon la logique "un seul perdant"
-				const targetPlayer = game.players.find(p => p.name === playerName);
+				const targetPlayer = game.players.find((p) => p.name === playerName);
 				if (targetPlayer) {
 					const newLostStatus = !targetPlayer.lost;
-					
+
 					if (newLostStatus) {
 						// Si on marque ce joueur comme perdant, tous les autres deviennent gagnants
-						game.players.forEach(p => {
-							p.lost = (p.name === playerName);
+						game.players.forEach((p) => {
+							p.lost = p.name === playerName;
 						});
 					} else {
 						// Si on retire le statut perdant, seul ce joueur change
 						targetPlayer.lost = false;
 					}
-					
+
 					game = { ...game }; // Force reactivity
 				}
 				triggerConfetti();
@@ -175,7 +175,7 @@
 			<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
 			</svg>
-			{groupId ? 'Retour au groupe' : 'Retour à l\'accueil'}
+			{groupId ? 'Retour au groupe' : "Retour à l'accueil"}
 		</button>
 	</div>
 
@@ -190,7 +190,7 @@
 				on:click={goBack}
 				class="rounded-lg bg-blue-500 px-6 py-3 text-white transition-colors duration-200 hover:bg-blue-600"
 			>
-				{groupId ? 'Retour au groupe' : 'Retour à l\'accueil'}
+				{groupId ? 'Retour au groupe' : "Retour à l'accueil"}
 			</button>
 		</div>
 	{:else if game}
