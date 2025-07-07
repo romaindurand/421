@@ -69,7 +69,11 @@
 	}
 
 	// Fonction pour calculer le taux de défaite uniquement sur les parties où le joueur a été accroché
-	function calculateHookedDefeatRate(playerName: string): { rate: number; hookedGames: number; hookedDefeats: number } {
+	function calculateHookedDefeatRate(playerName: string): {
+		rate: number;
+		hookedGames: number;
+		hookedDefeats: number;
+	} {
 		let hookedGames = 0;
 		let hookedDefeats = 0;
 
@@ -652,36 +656,39 @@
 			<div class="space-y-4">
 				<!-- Onglets de navigation -->
 				<div class="border-b border-gray-600">
-					<nav class="-mb-px flex space-x-1" aria-label="Onglets des statistiques">
+					<nav class="-mb-px flex flex-wrap gap-1 sm:space-x-1 sm:gap-0" aria-label="Onglets des statistiques">
 						<button
 							role="tab"
-							class="whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors {activeTab === 'defeat-rate'
+							class="flex-1 sm:flex-none border-b-2 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors {activeTab ===
+							'defeat-rate'
 								? 'border-blue-500 text-blue-400'
 								: 'border-transparent text-gray-400 hover:border-gray-300 hover:text-gray-300'}"
 							on:click={() => (activeTab = 'defeat-rate')}
 							aria-selected={activeTab === 'defeat-rate'}
 						>
-							📊 Taux de défaite
+							<span class="hidden sm:inline">📊 </span>Taux de défaite
 						</button>
 						<button
 							role="tab"
-							class="whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors {activeTab === 'normalized-score'
+							class="flex-1 sm:flex-none border-b-2 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors {activeTab ===
+							'normalized-score'
 								? 'border-blue-500 text-blue-400'
 								: 'border-transparent text-gray-400 hover:border-gray-300 hover:text-gray-300'}"
 							on:click={() => (activeTab = 'normalized-score')}
 							aria-selected={activeTab === 'normalized-score'}
 						>
-							⚖️ Score normalisé
+							<span class="hidden sm:inline">⚖️ </span>Score normalisé
 						</button>
 						<button
 							role="tab"
-							class="whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors {activeTab === 'hooked-defeat-rate'
+							class="flex-1 sm:flex-none border-b-2 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors {activeTab ===
+							'hooked-defeat-rate'
 								? 'border-blue-500 text-blue-400'
 								: 'border-transparent text-gray-400 hover:border-gray-300 hover:text-gray-300'}"
 							on:click={() => (activeTab = 'hooked-defeat-rate')}
 							aria-selected={activeTab === 'hooked-defeat-rate'}
 						>
-							🎣 Défaites accrochées
+							<span class="hidden sm:inline">🎣 </span>Défaites accrochées
 						</button>
 					</nav>
 				</div>
@@ -724,7 +731,9 @@
 					{:else if activeTab === 'normalized-score'}
 						<!-- Onglet 2: Score normalisé -->
 						<div>
-							<h3 class="mb-3 text-sm font-medium text-gray-300">Score normalisé (ajusté selon le nombre de joueurs) :</h3>
+							<h3 class="mb-3 text-sm font-medium text-gray-300">
+								Score normalisé (ajusté selon le nombre de joueurs) :
+							</h3>
 							<div class="space-y-2">
 								{#each getPlayersSortedByDefeatRate() as playerStats}
 									<div class="flex items-center justify-between rounded-lg bg-gray-700 p-3">
@@ -748,7 +757,8 @@
 											</span>
 											<div class="h-2 w-16 overflow-hidden rounded-full bg-gray-600">
 												<div
-													class="h-full transition-all duration-300 {playerStats.normalizedScore < 100
+													class="h-full transition-all duration-300 {playerStats.normalizedScore <
+													100
 														? 'bg-green-500'
 														: playerStats.normalizedScore > 100
 															? 'bg-red-500'
@@ -778,7 +788,9 @@
 					{:else if activeTab === 'hooked-defeat-rate'}
 						<!-- Onglet 3: Taux de défaites sur parties accrochées -->
 						<div>
-							<h3 class="mb-3 text-sm font-medium text-gray-300">Taux de défaite sur parties accrochées uniquement :</h3>
+							<h3 class="mb-3 text-sm font-medium text-gray-300">
+								Taux de défaite sur parties accrochées uniquement :
+							</h3>
 							<div class="space-y-2">
 								{#each getPlayersSortedByDefeatRate() as playerStats}
 									<div class="flex items-center justify-between rounded-lg bg-gray-700 p-3">
@@ -786,9 +798,14 @@
 											<div class="flex items-center gap-3">
 												<span class="font-medium text-gray-200">{playerStats.name}</span>
 												<span class="text-xs text-gray-400">
-													{playerStats.hookedGames} partie{playerStats.hookedGames > 1 ? 's' : ''} accrochée{playerStats.hookedGames > 1 ? 's' : ''}
+													{playerStats.hookedGames} partie{playerStats.hookedGames > 1 ? 's' : ''} accrochée{playerStats.hookedGames >
+													1
+														? 's'
+														: ''}
 													{#if playerStats.hookedGames > 0}
-														• {playerStats.hookedDefeats} défaite{playerStats.hookedDefeats > 1 ? 's' : ''}
+														• {playerStats.hookedDefeats} défaite{playerStats.hookedDefeats > 1
+															? 's'
+															: ''}
 													{/if}
 												</span>
 											</div>
@@ -818,8 +835,14 @@
 								<div class="mt-3 rounded-lg bg-amber-900/30 p-3 text-xs text-amber-200">
 									<div class="mb-1 font-medium">🎣 Statistiques accrochées</div>
 									<div class="space-y-1 text-amber-300">
-										<div>Cette statistique ne prend en compte que les parties où le joueur a été accroché.</div>
-										<div>Plus ce taux est élevé, plus le joueur a tendance à perdre quand il se fait accrocher.</div>
+										<div>
+											Cette statistique ne prend en compte que les parties où le joueur a été
+											accroché.
+										</div>
+										<div>
+											Plus ce taux est élevé, plus le joueur a tendance à perdre quand il se fait
+											accrocher.
+										</div>
 										<div class="mt-2 text-xs">
 											Un joueur qui n'apparaît jamais dans cette liste n'a jamais été accroché.
 										</div>
