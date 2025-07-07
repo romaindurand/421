@@ -10,6 +10,10 @@ export interface PlayerInGame {
 	name: string;
 	lost: boolean;
 	hooked: boolean;
+	// Nouvelles statistiques de jeu
+	four21Count: number;      // Nombre de 421 réussis
+	four21Rerolls: number;    // Nombre de 421 relancés
+	nenetteCount: number;     // Nombre de nenettes (2/2/1)
 }
 
 export interface Game {
@@ -126,6 +130,9 @@ export async function initDatabase(): Promise<void> {
 		
 		// Migrer automatiquement les mots de passe en clair vers des hashes
 		await migratePasswordsToHash();
+		
+		// Migrer automatiquement les anciennes parties sans statistiques de jeu
+		await migrateGameStats();
 	} catch (error) {
 		console.error('❌ Error reading/writing database:', error);
 	}
@@ -240,7 +247,10 @@ export async function createGameInGroup(groupId: string, playerNames: string[]):
 		players: playerNames.map(name => ({
 			name,
 			lost: false,
-			hooked: false
+			hooked: false,
+			four21Count: 0,
+			four21Rerolls: 0,
+			nenetteCount: 0
 		}))
 	};
 
@@ -309,6 +319,37 @@ export async function updatePlayerInGame(gameId: string, playerName: string, los
 	return false;
 }
 
+// Fonction pour mettre à jour les statistiques de jeu d'un joueur
+export async function updatePlayerGameStats(
+	gameId: string, 
+	playerName: string, 
+	statType: 'four21Count' | 'four21Rerolls' | 'nenetteCount',
+	increment: number
+): Promise<boolean> {
+	await db.read();
+	
+	for (const group of db.data!.groups) {
+		const game = group.games.find(g => g.id === gameId);
+		if (game) {
+			const player = game.players.find(p => p.name === playerName);
+			if (player) {
+				// Mettre à jour la statistique demandée
+				const newValue = player[statType] + increment;
+				
+				// S'assurer que la valeur ne devient pas négative
+				if (newValue >= 0) {
+					player[statType] = newValue;
+					group.updatedAt = new Date().toISOString();
+					await db.write();
+					return true;
+				}
+			}
+		}
+	}
+	
+	return false;
+}
+
 // Fonction pour supprimer une partie
 export async function deleteGame(gameId: string): Promise<boolean> {
 	await db.read();
@@ -359,6 +400,38 @@ export async function migratePasswordsToHash(): Promise<number> {
 	}
 	
 	return migratedCount;
+}
+
+/**
+ * Migre les anciennes parties sans statistiques de jeu
+ */
+export async function migrateGameStats(): Promise<number> {
+	await db.read();
+	
+	let migratedPlayersCount = 0;
+	
+	for (const group of db.data!.groups) {
+		for (const game of group.games) {
+			for (const player of game.players) {
+				// Vérifier si le joueur a déjà les nouvelles statistiques
+				if (player.four21Count === undefined) {
+					player.four21Count = 0;
+					player.four21Rerolls = 0;
+					player.nenetteCount = 0;
+					migratedPlayersCount++;
+				}
+			}
+		}
+	}
+	
+	if (migratedPlayersCount > 0) {
+		await db.write();
+		if (process.env.NODE_ENV !== 'production') {
+			console.log(`Migration des statistiques terminée: ${migratedPlayersCount} joueur(s) migré(s)`);
+		}
+	}
+	
+	return migratedPlayersCount;
 }
 
 // Fonction utilitaire pour générer un ID unique

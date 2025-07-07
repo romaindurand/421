@@ -11,6 +11,9 @@
 		name: string;
 		lost: boolean;
 		hooked: boolean;
+		four21Count: number;
+		four21Rerolls: number;
+		nenetteCount: number;
 	}
 
 	interface Game {
@@ -194,6 +197,37 @@
 			});
 		}, 300);
 	}
+
+	async function updatePlayerStat(
+		playerName: string,
+		statType: 'four21Count' | 'four21Rerolls' | 'nenetteCount',
+		increment: number
+	) {
+		if (!game) return;
+
+		try {
+			const response = await fetch(`/api/games/${game.id}/players/${playerName}/stats`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					statType,
+					increment
+				})
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				// Note: SSE va gérer la mise à jour de l'état
+			} else {
+				console.error('Erreur lors de la mise à jour des statistiques:', result.error);
+			}
+		} catch (error) {
+			console.error('Erreur lors de la mise à jour des statistiques:', error);
+		}
+	}
 </script>
 
 <svelte:head>
@@ -319,6 +353,18 @@
 												{player.lost ? 'A perdu' : 'En vie'} •
 												{player.hooked ? 'Accroché' : 'Pas accroché'}
 											</div>
+											<!-- Statistiques de jeu -->
+											<div class="mt-2 grid grid-cols-3 gap-3 text-xs">
+												<div class="rounded bg-green-900/30 px-2 py-1 text-green-200">
+													<div class="font-medium">421: {player.four21Count || 0}</div>
+												</div>
+												<div class="rounded bg-yellow-900/30 px-2 py-1 text-yellow-200">
+													<div class="font-medium">Relancés: {player.four21Rerolls || 0}</div>
+												</div>
+												<div class="rounded bg-purple-900/30 px-2 py-1 text-purple-200">
+													<div class="font-medium">Nenettes: {player.nenetteCount || 0}</div>
+												</div>
+											</div>
 										</div>
 									</div>
 
@@ -343,7 +389,7 @@
 											? 'bg-green-600 text-white hover:bg-green-700'
 											: 'bg-red-600 text-white hover:bg-red-700'}"
 									>
-										{player.lost ? 'Marquer comme gagnant' : 'Marquer comme perdant'}
+										{player.lost ? 'Retirer perdant' : 'Marquer perdant'}
 									</button>
 
 									<button
@@ -362,6 +408,82 @@
 												? "Retirer l'accrochage"
 												: 'Marquer comme accroché'}
 									</button>
+								</div>
+
+								<!-- Contrôles des statistiques de jeu -->
+								<div class="mt-4 grid grid-cols-3 gap-4">
+									<!-- 421 Count -->
+									<div class="rounded-lg bg-green-900/20 p-3">
+										<div class="mb-2 text-center text-sm font-medium text-green-200">
+											421 réussis
+										</div>
+										<div class="flex items-center justify-center gap-2">
+											<button
+												on:click={() => updatePlayerStat(player.name, 'four21Count', -1)}
+												class="flex h-8 w-8 items-center justify-center rounded bg-green-700 text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:bg-gray-600"
+												disabled={(player.four21Count || 0) === 0}
+											>
+												−
+											</button>
+											<span class="min-w-[2rem] text-center text-lg font-bold text-green-200">
+												{player.four21Count || 0}
+											</span>
+											<button
+												on:click={() => updatePlayerStat(player.name, 'four21Count', 1)}
+												class="flex h-8 w-8 items-center justify-center rounded bg-green-600 text-white hover:bg-green-700"
+											>
+												+
+											</button>
+										</div>
+									</div>
+
+									<!-- 421 Rerolls -->
+									<div class="rounded-lg bg-yellow-900/20 p-3">
+										<div class="mb-2 text-center text-sm font-medium text-yellow-200">
+											421 relancés
+										</div>
+										<div class="flex items-center justify-center gap-2">
+											<button
+												on:click={() => updatePlayerStat(player.name, 'four21Rerolls', -1)}
+												class="flex h-8 w-8 items-center justify-center rounded bg-yellow-700 text-white hover:bg-yellow-800 disabled:cursor-not-allowed disabled:bg-gray-600"
+												disabled={(player.four21Rerolls || 0) === 0}
+											>
+												−
+											</button>
+											<span class="min-w-[2rem] text-center text-lg font-bold text-yellow-200">
+												{player.four21Rerolls || 0}
+											</span>
+											<button
+												on:click={() => updatePlayerStat(player.name, 'four21Rerolls', 1)}
+												class="flex h-8 w-8 items-center justify-center rounded bg-yellow-600 text-white hover:bg-yellow-700"
+											>
+												+
+											</button>
+										</div>
+									</div>
+
+									<!-- Nenette Count -->
+									<div class="rounded-lg bg-purple-900/20 p-3">
+										<div class="mb-2 text-center text-sm font-medium text-purple-200">Nenettes</div>
+										<div class="flex items-center justify-center gap-2">
+											<button
+												on:click={() => updatePlayerStat(player.name, 'nenetteCount', -1)}
+												class="flex h-8 w-8 items-center justify-center rounded bg-purple-700 text-white hover:bg-purple-800 disabled:cursor-not-allowed disabled:bg-gray-600"
+												disabled={(player.nenetteCount || 0) === 0}
+											>
+												−
+											</button>
+											<span class="min-w-[2rem] text-center text-lg font-bold text-purple-200">
+												{player.nenetteCount || 0}
+											</span>
+											<button
+												on:click={() => updatePlayerStat(player.name, 'nenetteCount', 1)}
+												class="flex h-8 w-8 items-center justify-center rounded bg-purple-600 text-white hover:bg-purple-700"
+											>
+												+
+											</button>
+										</div>
+									</div>
 								</div>
 							</div>
 						{/each}
