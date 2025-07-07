@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { verifyGroupPassword } from '$lib/database.js';
+import { getSessionDuration, config } from '$lib/config.js';
 import type { RequestHandler } from '@sveltejs/kit';
 
 export const POST: RequestHandler = async ({ params, request, cookies }) => {
@@ -17,19 +18,19 @@ export const POST: RequestHandler = async ({ params, request, cookies }) => {
 			return json({ success: false, error: 'Mot de passe incorrect' }, { status: 401 });
 		}
 
-		// Définir un cookie de session pour ce groupe (valable 30 jours)
+		// Définir un cookie de session pour ce groupe
 		cookies.set(`group_access_${id}`, 'authenticated', {
-			maxAge: 30 * 24 * 60 * 60, // 30 jours en secondes
+			maxAge: getSessionDuration(),
 			httpOnly: true,
-			secure: false, // en développement, mis à true en production
-			sameSite: 'lax', // changé de 'strict' à 'lax' pour plus de compatibilité
+			secure: config.cookieSettings.secure,
+			sameSite: config.cookieSettings.sameSite,
 			path: '/'
 		});
 
 		console.log(`Cookie défini pour groupe ${id}:`, {
 			name: `group_access_${id}`,
 			value: 'authenticated',
-			maxAge: 30 * 24 * 60 * 60
+			maxAge: getSessionDuration()
 		});
 
 		return json({ success: true, message: 'Mot de passe correct' });

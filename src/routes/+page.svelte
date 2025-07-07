@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { dev } from '$app/environment';
 	import confetti from 'canvas-confetti';
+	import { isPasswordRequired } from '$lib/config.js';
 
 	interface Group {
 		id: string;
@@ -257,6 +259,13 @@
 
 	async function checkAuthAndAccess(groupId: string, groupName: string) {
 		try {
+			// En mode dev avec passwords désactivés, aller directement au groupe
+			if (!isPasswordRequired()) {
+				console.log('Mode développement - accès direct au groupe sans mot de passe');
+				await goto(`/group/${groupId}`);
+				return;
+			}
+
 			// Essayer d'abord d'accéder directement au groupe
 			console.log(`Vérification de l'accès au groupe ${groupId}...`);
 
@@ -280,14 +289,33 @@
 			}
 		} catch (error) {
 			console.error("Erreur lors de la vérification de l'accès:", error);
-			// En cas d'erreur réseau, ouvrir la modal par sécurité
-			openPasswordModal(groupId, groupName);
+			// En cas d'erreur réseau, ouvrir la modal par sécurité (sauf en mode dev sans passwords)
+			if (isPasswordRequired()) {
+				openPasswordModal(groupId, groupName);
+			} else {
+				await goto(`/group/${groupId}`);
+			}
 		}
 	}
 </script>
 
 <div class="mx-auto min-h-screen max-w-4xl bg-gray-900 p-8 font-sans text-gray-100">
 	<h1 class="mb-8 text-center text-3xl font-bold text-gray-100">Mes Groupes de Joueurs</h1>
+
+	<!-- Indicateur mode développement -->
+	{#if dev && !isPasswordRequired()}
+		<div class="mb-4 rounded-lg border border-yellow-600 bg-yellow-900 p-4 text-yellow-200">
+			<div class="flex items-center gap-2">
+				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+				</svg>
+				<span class="font-medium">Mode développement</span>
+			</div>
+			<p class="mt-2 text-sm">
+				Les mots de passe sont désactivés. Accès libre à tous les groupes.
+			</p>
+		</div>
+	{/if}
 
 	<!-- Messages d'erreur et de succès -->
 	{#if errorMessage}

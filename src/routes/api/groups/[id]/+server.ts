@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { getGroupById, deleteGroup, initDatabase } from '$lib/database.js';
+import { isPasswordRequired } from '$lib/config.js';
 import type { RequestHandler } from '@sveltejs/kit';
 
 // Initialiser la base de données
@@ -17,14 +18,16 @@ export const GET: RequestHandler = async ({ params, cookies }) => {
 			);
 		}
 
-		// Vérifier l'authentification pour ce groupe
-		const sessionCookie = cookies.get(`group_access_${id}`);
-		
-		if (!sessionCookie || sessionCookie !== 'authenticated') {
-			return json(
-				{ success: false, error: 'Accès non autorisé' },
-				{ status: 401 }
-			);
+		// Vérifier l'authentification pour ce groupe si requis
+		if (isPasswordRequired()) {
+			const sessionCookie = cookies.get(`group_access_${id}`);
+			
+			if (!sessionCookie || sessionCookie !== 'authenticated') {
+				return json(
+					{ success: false, error: 'Accès non autorisé' },
+					{ status: 401 }
+				);
+			}
 		}
 
 		const group = await getGroupById(id);
