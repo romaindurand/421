@@ -32,6 +32,12 @@
 	let isLoading = false;
 	let showNormalizedScore = false; // Toggle pour affichage score normalisé
 
+	// Variables pour l'ajout de joueur
+	let newPlayerName = '';
+	let isAddingPlayer = false;
+	let addPlayerError = '';
+	let showAddPlayerForm = false;
+
 	// Variables pour la suppression avec progression
 	let deletingGameId: string | null = null;
 	let deleteProgress = 0;
@@ -171,6 +177,64 @@
 		}
 
 		isLoading = false;
+	}
+
+	async function addPlayer() {
+		if (!newPlayerName.trim()) {
+			addPlayerError = 'Le nom de joueur ne peut pas être vide';
+			return;
+		}
+
+		if (newPlayerName.trim().length > 50) {
+			addPlayerError = 'Le nom de joueur ne peut pas dépasser 50 caractères';
+			return;
+		}
+
+		if (group.playerNames.includes(newPlayerName.trim())) {
+			addPlayerError = 'Ce joueur existe déjà dans le groupe';
+			return;
+		}
+
+		isAddingPlayer = true;
+		addPlayerError = '';
+
+		try {
+			const response = await fetch(`/api/groups/${group.id}/players`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					playerName: newPlayerName.trim()
+				})
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				// Ajouter le joueur à la liste locale
+				group.playerNames = [...group.playerNames, result.playerName];
+				newPlayerName = '';
+				showAddPlayerForm = false;
+				successMessage = `Joueur "${result.playerName}" ajouté avec succès !`;
+				setTimeout(() => {
+					successMessage = '';
+				}, 3000);
+			} else {
+				addPlayerError = result.error || "Erreur lors de l'ajout du joueur";
+			}
+		} catch (error) {
+			console.error("Erreur lors de l'ajout du joueur:", error);
+			addPlayerError = "Erreur lors de l'ajout du joueur";
+		}
+
+		isAddingPlayer = false;
+	}
+
+	function cancelAddPlayer() {
+		showAddPlayerForm = false;
+		newPlayerName = '';
+		addPlayerError = '';
 	}
 
 	function startDeleteGame(gameId: string) {
@@ -406,6 +470,86 @@
 			{successMessage}
 		</div>
 	{/if}
+
+	<!-- Section d'ajout de joueur -->
+	<div class="mb-8 rounded-lg border border-gray-600 bg-gray-800 p-6">
+		<div class="mb-4 flex items-center justify-between">
+			<h3 class="text-lg font-semibold text-gray-200">Gestion des joueurs</h3>
+			{#if !showAddPlayerForm}
+				<button
+					on:click={() => (showAddPlayerForm = true)}
+					class="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+				>
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M12 4v16m8-8H4"
+						/>
+					</svg>
+					Ajouter un joueur
+				</button>
+			{/if}
+		</div>
+
+		{#if showAddPlayerForm}
+			<div
+				class="rounded-lg border border-green-600 bg-green-900/20 p-4"
+				transition:slide={{ duration: 300 }}
+			>
+				<h4 class="mb-3 text-sm font-medium text-green-200">Ajouter un nouveau joueur</h4>
+
+				<div class="space-y-3">
+					<div>
+						<input
+							type="text"
+							bind:value={newPlayerName}
+							placeholder="Nom du nouveau joueur"
+							class="w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-gray-100 placeholder-gray-400 focus:border-green-500 focus:ring-1 focus:ring-green-500 focus:outline-none"
+							maxlength="50"
+						/>
+					</div>
+
+					{#if addPlayerError}
+						<div class="rounded-lg bg-red-900/30 p-3 text-sm text-red-200">
+							{addPlayerError}
+						</div>
+					{/if}
+
+					<div class="flex gap-2">
+						<button
+							on:click={addPlayer}
+							disabled={isAddingPlayer || !newPlayerName.trim()}
+							class="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-600"
+						>
+							{isAddingPlayer ? 'Ajout...' : 'Ajouter'}
+						</button>
+						<button
+							on:click={cancelAddPlayer}
+							class="rounded-lg bg-gray-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
+						>
+							Annuler
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Liste des joueurs actuels -->
+		<div class="mt-4">
+			<h4 class="mb-2 text-sm font-medium text-gray-300">
+				Joueurs du groupe ({group.playerNames.length})
+			</h4>
+			<div class="flex flex-wrap gap-2">
+				{#each group.playerNames as playerName}
+					<span class="rounded-full bg-blue-600/20 px-3 py-1 text-sm text-blue-200">
+						{playerName}
+					</span>
+				{/each}
+			</div>
+		</div>
+	</div>
 
 	<div class="grid gap-8 lg:grid-cols-2">
 		<!-- Création d'une nouvelle partie -->

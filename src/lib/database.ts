@@ -195,6 +195,28 @@ export async function deleteGroup(id: string): Promise<boolean> {
 	return false;
 }
 
+// Fonction pour ajouter un joueur à un groupe
+export async function addPlayerToGroup(groupId: string, playerName: string): Promise<boolean> {
+	await db.read();
+	
+	const group = db.data!.groups.find(g => g.id === groupId);
+	if (!group) {
+		return false;
+	}
+	
+	// Vérifier si le joueur n'existe pas déjà
+	if (group.playerNames.includes(playerName)) {
+		return false;
+	}
+	
+	// Ajouter le joueur
+	group.playerNames.push(playerName);
+	group.updatedAt = new Date().toISOString();
+	
+	await db.write();
+	return true;
+}
+
 // ============= FONCTIONS POUR LES PARTIES =============
 
 // Fonction pour créer une nouvelle partie dans un groupe
