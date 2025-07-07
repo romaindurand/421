@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { getGameById, deleteGame } from '$lib/database.js';
 import { broadcastEvent } from '$lib/sse.js';
+import { isPasswordRequired } from '$lib/config.js';
 import type { RequestHandler } from '@sveltejs/kit';
 
 export const GET: RequestHandler = async ({ params, cookies }) => {
@@ -17,11 +18,13 @@ export const GET: RequestHandler = async ({ params, cookies }) => {
 			return json({ success: false, error: 'Partie non trouvée' }, { status: 404 });
 		}
 
-		// Vérifier l'authentification pour le groupe de cette partie
-		const sessionCookie = cookies.get(`group_access_${result.group.id}`);
-		
-		if (!sessionCookie || sessionCookie !== 'authenticated') {
-			return json({ success: false, error: 'Accès non autorisé' }, { status: 401 });
+		// Vérifier l'authentification pour le groupe de cette partie (seulement si requis selon la config)
+		if (isPasswordRequired()) {
+			const sessionCookie = cookies.get(`group_access_${result.group.id}`);
+			
+			if (!sessionCookie || sessionCookie !== 'authenticated') {
+				return json({ success: false, error: 'Accès non autorisé' }, { status: 401 });
+			}
 		}
 
 		return json({ success: true, data: { game: result.game, groupId: result.group.id } });
@@ -45,11 +48,13 @@ export const DELETE: RequestHandler = async ({ params, cookies }) => {
 			return json({ success: false, error: 'Partie non trouvée' }, { status: 404 });
 		}
 
-		// Vérifier l'authentification pour le groupe de cette partie
-		const sessionCookie = cookies.get(`group_access_${gameResult.group.id}`);
-		
-		if (!sessionCookie || sessionCookie !== 'authenticated') {
-			return json({ success: false, error: 'Accès non autorisé' }, { status: 401 });
+		// Vérifier l'authentification pour le groupe de cette partie (seulement si requis selon la config)
+		if (isPasswordRequired()) {
+			const sessionCookie = cookies.get(`group_access_${gameResult.group.id}`);
+			
+			if (!sessionCookie || sessionCookie !== 'authenticated') {
+				return json({ success: false, error: 'Accès non autorisé' }, { status: 401 });
+			}
 		}
 
 		const success = await deleteGame(id);

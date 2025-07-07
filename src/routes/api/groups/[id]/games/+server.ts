@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { createGameInGroup, initDatabase } from '$lib/database.js';
 import { broadcastEvent } from '$lib/sse.js';
+import { isPasswordRequired } from '$lib/config.js';
 import type { RequestHandler } from '@sveltejs/kit';
 
 // Initialiser la base de données
@@ -18,14 +19,16 @@ export const POST: RequestHandler = async ({ params, request, cookies }) => {
 			);
 		}
 
-		// Vérifier l'authentification pour ce groupe
-		const sessionCookie = cookies.get(`group_access_${groupId}`);
-		
-		if (!sessionCookie || sessionCookie !== 'authenticated') {
-			return json(
-				{ success: false, error: 'Accès non autorisé' },
-				{ status: 401 }
-			);
+		// Vérifier l'authentification pour ce groupe (seulement si requis selon la config)
+		if (isPasswordRequired()) {
+			const sessionCookie = cookies.get(`group_access_${groupId}`);
+			
+			if (!sessionCookie || sessionCookie !== 'authenticated') {
+				return json(
+					{ success: false, error: 'Accès non autorisé' },
+					{ status: 401 }
+				);
+			}
 		}
 
 		const { playerNames } = await request.json();

@@ -30,6 +30,7 @@
 	let errorMessage = '';
 	let successMessage = '';
 	let isLoading = false;
+	let showNormalizedScore = false; // Toggle pour affichage score normalisé
 
 	// Variables pour la suppression avec progression
 	let deletingGameId: string | null = null;
@@ -276,6 +277,72 @@
 			console.error('Erreur lors de la déconnexion:', error);
 		}
 	}
+
+	// Fonction pour calculer le taux de défaite d'un joueur
+	function calculateDefeatRate(playerName: string): number {
+		let totalGames = 0;
+		let defeats = 0;
+
+		group.games.forEach(game => {
+			const player = game.players.find(p => p.name === playerName);
+			if (player) {
+				totalGames++;
+				if (player.lost) {
+					defeats++;
+				}
+			}
+		});
+
+		return totalGames === 0 ? 0 : (defeats / totalGames) * 100;
+	}
+
+	// Fonction pour calculer le score normalisé qui prend en compte le nombre de joueurs
+	function calculateNormalizedScore(playerName: string): number {
+		let totalWeightedScore = 0;
+		let totalWeight = 0;
+
+		group.games.forEach(game => {
+			const player = game.players.find(p => p.name === playerName);
+			if (player) {
+				const playerCount = game.players.length;
+				const theoreticalDefeatRate = 100 / playerCount; // Probabilité théorique de perdre
+				const actualDefeat = player.lost ? 100 : 0; // 100% si perdu, 0% si gagné
+				const normalizedScore = (actualDefeat / theoreticalDefeatRate) * 100;
+				
+				// Pondération par le nombre de joueurs pour donner plus de poids aux parties difficiles
+				const weight = playerCount;
+				totalWeightedScore += normalizedScore * weight;
+				totalWeight += weight;
+			}
+		});
+
+		return totalWeight === 0 ? 0 : totalWeightedScore / totalWeight;
+	}
+
+	// Fonction pour obtenir les joueurs triés par taux de défaite ou score normalisé
+	function getPlayersSortedByDefeatRate() {
+		return group.playerNames
+			.map(playerName => ({
+				name: playerName,
+				defeatRate: calculateDefeatRate(playerName),
+				normalizedScore: calculateNormalizedScore(playerName),
+				totalGames: group.games.filter(game => 
+					game.players.some(p => p.name === playerName)
+				).length,
+				avgPlayersPerGame: group.games.filter(game => 
+					game.players.some(p => p.name === playerName)
+				).reduce((sum, game) => sum + game.players.length, 0) / Math.max(1, group.games.filter(game => 
+					game.players.some(p => p.name === playerName)
+				).length)
+			}))
+			.sort((a, b) => {
+				if (showNormalizedScore) {
+					return a.normalizedScore - b.normalizedScore;
+				} else {
+					return a.defeatRate - b.defeatRate;
+				}
+			});
+	}
 </script>
 
 <svelte:head>
@@ -405,14 +472,83 @@
 
 			<div class="space-y-4">
 				<div>
-					<h3 class="mb-2 text-sm font-medium text-gray-300">Joueurs du groupe :</h3>
-					<div class="flex flex-wrap gap-2">
-						{#each group.playerNames as playerName}
-							<span class="rounded-full bg-blue-600 px-3 py-1 text-xs text-white">
-								{playerName}
-							</span>
+					<div class="mb-3 flex items-center justify-between">
+						<h3 class="text-sm font-medium text-gray-300">Statistiques des joueurs :</h3>
+						<button
+							on:click={() => showNormalizedScore = !showNormalizedScore}
+							class="flex items-center gap-2 rounded-lg px-3 py-1 text-xs transition-colors {showNormalizedScore ? 'bg-blue-600 text-white' : 'bg-gray-600 text-gray-200 hover:bg-gray-500'}"
+							title={showNormalizedScore ? 'Afficher le taux de défaite brut' : 'Afficher le score normalisé (ajusté selon le nombre de joueurs)'}
+						>
+							<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+							</svg>
+							{showNormalizedScore ? 'Score normalisé' : 'Taux brut'}
+						</button>
+					</div>
+					<div class="space-y-2">
+						{#each getPlayersSortedByDefeatRate() as playerStats}
+							<div class="flex items-center justify-between rounded-lg bg-gray-700 p-3">
+								<div class="flex flex-col gap-1">
+									<div class="flex items-center gap-3">
+										<span class="font-medium text-gray-200">{playerStats.name}</span>
+										<span class="text-xs text-gray-400">
+											{playerStats.totalGames} partie{playerStats.totalGames > 1 ? 's' : ''}
+											{#if playerStats.totalGames > 0}
+												• moy. {playerStats.avgPlayersPerGame.toFixed(1)} joueurs
+											{/if}
+										</span>
+									</div>
+									{#if showNormalizedScore && playerStats.totalGames > 0}
+										<div class="text-xs text-gray-500">
+											Taux brut: {playerStats.defeatRate.toFixed(1)}%
+										</div>
+									{/if}
+								</div>
+								<div class="flex items-center gap-2">
+									{#if showNormalizedScore}
+										<span class="text-sm text-gray-300">
+											{playerStats.normalizedScore.toFixed(0)}
+										</span>
+										<div class="h-2 w-16 overflow-hidden rounded-full bg-gray-600">
+											<div 
+												class="h-full transition-all duration-300 {playerStats.normalizedScore < 100 ? 'bg-green-500' : playerStats.normalizedScore > 100 ? 'bg-red-500' : 'bg-yellow-500'}"
+												style="width: {Math.min(playerStats.normalizedScore, 200) / 2}%"
+											></div>
+										</div>
+									{:else}
+										<span class="text-sm text-gray-300">
+											{playerStats.defeatRate.toFixed(1)}%
+										</span>
+										<div class="h-2 w-16 overflow-hidden rounded-full bg-gray-600">
+											<div 
+												class="h-full bg-gradient-to-r from-green-500 to-red-500 transition-all duration-300"
+												style="width: {playerStats.defeatRate}%"
+											></div>
+										</div>
+									{/if}
+								</div>
+							</div>
 						{/each}
 					</div>
+					{#if showNormalizedScore && group.games.length > 0}
+						<div class="mt-3 rounded-lg bg-blue-900/30 p-3 text-xs text-blue-200">
+							<div class="font-medium mb-1">ℹ️ Score normalisé</div>
+							<div class="space-y-1 text-blue-300">
+								<div>• <strong>&lt; 100</strong> : Meilleur que la moyenne théorique</div>
+								<div>• <strong>= 100</strong> : Conforme à la moyenne théorique</div>
+								<div>• <strong>&gt; 100</strong> : Moins bon que la moyenne théorique</div>
+								<div class="mt-2 text-xs">
+									Ce score ajuste le taux de défaite selon le nombre de joueurs par partie 
+									(plus difficile avec moins de joueurs).
+								</div>
+							</div>
+						</div>
+					{/if}
+					{#if group.games.length === 0}
+						<p class="mt-3 text-sm text-gray-500 italic">
+							Aucune statistique disponible - créez une partie pour voir les taux de défaite
+						</p>
+					{/if}
 				</div>
 			</div>
 		</div>
